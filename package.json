@@ -1,0 +1,27 @@
+{
+  "name": "lifidynamicens",
+  "version": "1.0.0",
+  "description": "LiFi Composer script to mint USDC/USDT liquidity on Uniswap v3/v4 (Optimism)",
+  "main": "index.js",
+  "scripts": {
+    "mint:v3": "tsx src/run.ts v3",
+    "mint:v4": "tsx src/run.ts v4",
+    "compile": "tsx src/run.ts",
+    "typecheck": "tsc --noEmit",
+    "dev:web": "npm run dev --prefix web",
+    "build:web": "npm run build --prefix web",
+    "install:web": "npm install --prefix web"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@lifi/compose-spec": "^0.2.0-staging.5",
+    "@lifi/composer-sdk": "^0.2.0-staging.5",
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "viem": "^2.52.2"
+  }
+}
