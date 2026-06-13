@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import DynamicWidget from "./dynamic/dynamic-widget";
 import DynamicLogo from "./dynamic/logo";
 import LogoutButton from "./dynamic/logout-button";
 import { HamburgerMenu } from "./hamburger-menu";
@@ -24,6 +25,7 @@ export default function Header() {
       </div>
       <div className="hidden md:flex gap-2 pr-4 items-center">
         {navItems}
+        <DynamicWidget />
         <LogoutButton />
         <ModeToggle />
       </div>

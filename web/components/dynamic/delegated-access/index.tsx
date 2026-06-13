@@ -16,7 +16,6 @@
 import { useState } from "react";
 import { Sparkles, Code2 } from "lucide-react";
 import {
-  SpinnerIcon,
   useDynamicContext,
   useWalletDelegation,
 } from "@dynamic-labs/sdk-react-core";
@@ -30,11 +29,12 @@ import ConnectedWalletInfo from "./components/connected-wallet-info";
 import ConnectWalletPrompt from "./components/connect-wallet-prompt";
 import WalletStatusTable from "./components/wallet-status-table";
 import DelegationInfoBox from "@/components/info/delegation-info-box";
+import DynamicSdkGate from "@/components/dynamic/dynamic-sdk-gate";
 
 type DelegationTab = "modal" | "custom";
 
 export default function DelegatedAccess() {
-  const { sdkHasLoaded, primaryWallet } = useDynamicContext();
+  const { primaryWallet } = useDynamicContext();
   const {
     delegatedAccessEnabled,
     getWalletsDelegatedStatus,
@@ -42,21 +42,14 @@ export default function DelegatedAccess() {
   } = useWalletDelegation();
   const [activeTab, setActiveTab] = useState<DelegationTab>("modal");
 
-  if (!sdkHasLoaded) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <SpinnerIcon className="w-10 h-10 animate-spin text-dynamic" />
-      </div>
-    );
-  }
-
   const walletStatuses = getWalletsDelegatedStatus();
   const primaryWalletDelegationStatus = walletStatuses.find(
     (wallet) => wallet.address === primaryWallet?.address,
   );
 
   return (
-    <div className="space-y-6">
+    <DynamicSdkGate>
+      <div className="space-y-6">
       {/* Main Status Card */}
       <div className="rounded-xl border bg-card overflow-hidden">
         <DelegationStatusHeader
@@ -101,7 +94,8 @@ export default function DelegatedAccess() {
         )}
 
       <DelegationInfoBox />
-    </div>
+      </div>
+    </DynamicSdkGate>
   );
 }
 
