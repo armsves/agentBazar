@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+web/.env
+web/.env.*
+!web/.env.example
+*.pem
+private-key.pem
+public-key.pem
+node_modules
+web/node_modules
