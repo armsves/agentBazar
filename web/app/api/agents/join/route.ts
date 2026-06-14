@@ -1,27 +1,15 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getAddress } from "viem";
 
 import { discoverAgentsFromEns } from "@/lib/agents/registry/discover-ens";
-import {
-  type AgentRegistrationRecord,
-  upsertAgentRegistration,
-} from "@/lib/agents/registry/dynamic-storage";
+import { registerAgentWithEns } from "@/lib/agents/registry/ens-registration";
 import { saveAgentIntroduction } from "@/lib/agents/registry/introductions";
 import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
-import { AGENT_REGISTRY } from "@/lib/agents/registry";
-import {
-  conciergeEndpoints,
-} from "@/lib/agents/orchestrator/catalog-context";
-import {
-  isAutonomousRegistrationEnabled,
-  verifyEnsAgentRegistration,
-  verifyRegistrationSignature,
-  verifyRegistrySecret,
-} from "@/lib/agents/registry/verify-registration";
+import { conciergeEndpoints } from "@/lib/agents/orchestrator/catalog-context";
+import { isAutonomousRegistrationEnabled } from "@/lib/agents/registry/verify-registration";
 import { JoinAgentSchema } from "../schema";
 
-/** POST /api/agents/join — register, introduce to concierge, confirm catalog inclusion */
+/** POST /api/agents/join — register with ENS subdomain, introduce to concierge */
 export async function POST(request: NextRequest) {
   if (!isAutonomousRegistrationEnabled()) {
     return NextResponse.json(
@@ -44,79 +32,37 @@ export async function POST(request: NextRequest) {
   }
 
   const { manifest, timestamp, signature, signer, introduction } = parsed.data;
-  const ensName = parsed.data.ensName ?? manifest.ensName;
-  const authHeader = request.headers.get("authorization");
-
-  let verification: AgentRegistrationRecord["verification"] | null = null;
-  let verifiedSigner: string | undefined;
-
-  if (verifyRegistrySecret(authHeader)) {
-    verification = "secret";
-  } else if (signature && signer) {
-    const valid = await verifyRegistrationSignature({
-      agentId: manifest.id,
-      ensName,
-      timestamp,
-      signer,
-      signature: signature as `0x${string}`,
-    });
-    if (valid) {
-      verification = "signature";
-      verifiedSigner = getAddress(signer);
-    }
-  } else if (ensName) {
-    const ensCheck = await verifyEnsAgentRegistration({
-      ensName,
-      agentId: manifest.id,
-    });
-    if (ensCheck.verified) verification = "ens";
-  }
-
-  if (!verification) {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Join not authorized. Provide wallet signature, Bearer AGENT_REGISTRY_SECRET, or ENS proof.",
-      },
-      { status: 401 },
-    );
-  }
-
-  const builtin = AGENT_REGISTRY.find((a) => a.id === manifest.id);
-  if (builtin && verification !== "ens" && verification !== "secret") {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Built-in agents can only be joined via ENS verification or registry secret.",
-      },
-      { status: 403 },
-    );
-  }
-
-  const now = new Date().toISOString();
-  const ensCheck = ensName
-    ? await verifyEnsAgentRegistration({ ensName, agentId: manifest.id })
-    : null;
-
-  const { ensName: _e, endpoints: _ep, ...agentFields } = manifest;
-
-  const record = await upsertAgentRegistration({
-    agent: agentFields,
-    ensName,
-    endpoints: ensCheck?.endpoints ?? manifest.endpoints,
-    registeredAt: now,
-    updatedAt: now,
-    signer: verifiedSigner,
-    verification,
+  const result = await registerAgentWithEns({
+    manifest: {
+      ...manifest,
+      ensName: parsed.data.ensName ?? manifest.ensName,
+    },
+    timestamp,
+    signature,
+    signer,
+    authHeader: request.headers.get("authorization"),
   });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: result.error,
+        ensName: result.ensName ?? null,
+        details: result.details,
+      },
+      { status: result.status },
+    );
+  }
+
+  const { record, ensProvisioned } = result;
+  const now = new Date().toISOString();
 
   if (introduction?.trim()) {
     await saveAgentIntroduction({
       agentId: manifest.id,
       message: introduction.trim(),
-      signer: verifiedSigner ?? signer ?? "unknown",
+      signer: record.signer ?? signer ?? "unknown",
       introducedAt: now,
     });
   }
@@ -134,9 +80,10 @@ export async function POST(request: NextRequest) {
     agent: record.agent,
     ensName: record.ensName ?? null,
     verification: record.verification,
+    ensProvisioned,
     concierge,
     message: included
-      ? `${record.agent.name} joined Agent Bazar. Users can discover it via the Concierge at ${concierge.web}.`
-      : "Registered but not yet visible in catalog.",
+      ? `${record.agent.name} joined Agent Bazar at ${record.ensName}. Users can discover it via the Concierge at ${concierge.web}.`
+      : "Registered but not yet visible in marketplace (ENS verification required).",
   });
 }

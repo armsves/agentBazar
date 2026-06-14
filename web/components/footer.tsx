@@ -1,4 +1,4 @@
-import DynamicLogo from "./dynamic/logo";
+import SponsorLogos from "./sponsors/sponsor-logos";
 
 interface FooterProps {
   bottomLinks?: {
@@ -24,12 +24,9 @@ export default function Footer({
   return (
     <footer className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 border-t border-border">
       <div className="container mx-auto px-4 py-3">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">powered by</span>
-            <DynamicLogo width={75} height={15} />
-          </div>
-          <ul className="flex gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-muted-foreground">
+          <SponsorLogos />
+          <ul className="flex flex-wrap justify-center gap-4">
             {bottomLinks.map((link) => (
               <li key={link.url}>
                 <a

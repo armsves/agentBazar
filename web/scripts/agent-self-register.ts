@@ -1,6 +1,8 @@
 #!/usr/bin/env tsx
 /**
  * Autonomous agent self-registration — signs a manifest and POSTs to /api/agents/register.
+ * External agents must have ENS: the server auto-claims {agentId}.<ENS_AGENT_PARENT>
+ * when ENS_PARENT_PRIVATE_KEY (or PRIVATE_KEY) is configured.
  *
  * Env:
  *   AGENT_SIGNER_KEY or PRIVATE_KEY — wallet that signs registration

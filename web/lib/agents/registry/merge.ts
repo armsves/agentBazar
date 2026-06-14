@@ -1,4 +1,5 @@
 import type { Agent } from "@/lib/agents/types";
+import { agentEnsName } from "@/lib/ens/agent-records";
 
 import { AGENT_REGISTRY } from "@/lib/agents/registry";
 import {
@@ -7,12 +8,14 @@ import {
   type AgentRegistrationRecord,
 } from "./dynamic-storage";
 import { discoverAgentsFromEns } from "./discover-ens";
+import { isMarketplaceListed } from "./ens-registration";
 
 export type CatalogAgent = Agent & {
   source: "builtin" | "registered";
   ensName?: string;
   endpoints?: { web?: string | null; mcp?: string | null };
   registeredAt?: string;
+  verification?: AgentRegistrationRecord["verification"];
 };
 
 function toCatalogAgent(
@@ -20,12 +23,17 @@ function toCatalogAgent(
   record?: AgentRegistrationRecord,
   source: "builtin" | "registered" = "builtin",
 ): CatalogAgent {
+  const parent = process.env.ENS_AGENT_PARENT?.trim();
+  const defaultEns =
+    parent && source === "builtin" ? agentEnsName(agent, parent) : undefined;
+
   return {
     ...agent,
     source: record ? "registered" : source,
-    ensName: record?.ensName,
+    ensName: record?.ensName ?? defaultEns,
     endpoints: record?.endpoints,
     registeredAt: record?.registeredAt,
+    verification: record?.verification,
   };
 }
 
@@ -45,12 +53,19 @@ export async function listAllAgents(options?: {
 
   for (const agent of AGENT_REGISTRY) {
     const record = registrationById.get(agent.id);
-    merged.set(agent.id, toCatalogAgent(agent, record, "builtin"));
+    const catalog = toCatalogAgent(agent, record, "builtin");
+    if (isMarketplaceListed("builtin", record)) {
+      merged.set(agent.id, catalog);
+    }
     registrationById.delete(agent.id);
   }
 
   for (const record of registrationById.values()) {
-    merged.set(record.agent.id, toCatalogAgent(record.agent, record, "registered"));
+    if (!isMarketplaceListed("registered", record)) continue;
+    merged.set(
+      record.agent.id,
+      toCatalogAgent(record.agent, record, "registered"),
+    );
   }
 
   return [...merged.values()];
@@ -68,10 +83,11 @@ export async function getAgentByIdMerged(
   const record = await getAgentRegistration(agentId);
 
   if (builtin) {
-    return toCatalogAgent(builtin, record, "builtin");
+    const catalog = toCatalogAgent(builtin, record, "builtin");
+    return isMarketplaceListed("builtin", record) ? catalog : undefined;
   }
 
-  if (record) {
+  if (record && isMarketplaceListed("registered", record)) {
     return toCatalogAgent(record.agent, record, "registered");
   }
 

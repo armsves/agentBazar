@@ -7,6 +7,7 @@ import { OPTIMISM_CHAIN_ID } from "../../../../src/optimism";
 
 import {
   type AgentRegistrationRecord,
+  listAgentRegistrations,
   upsertAgentRegistration,
 } from "./dynamic-storage";
 import {
@@ -110,6 +111,19 @@ export function knownEnsNamesForParent(parentName: string): string[] {
   return [...names];
 }
 
+export async function knownEnsNamesForDiscovery(
+  parentName: string,
+): Promise<string[]> {
+  const names = new Set(knownEnsNamesForParent(parentName));
+  const registrations = await listAgentRegistrations();
+
+  for (const record of registrations) {
+    if (record.ensName?.trim()) names.add(record.ensName.trim());
+  }
+
+  return [...names];
+}
+
 export async function discoverAgentFromEnsName(
   ensName: string,
   parentName: string,
@@ -159,7 +173,7 @@ export async function discoverAgentsFromEns(params?: {
     params?.parentName?.trim() || process.env.ENS_AGENT_PARENT?.trim();
   if (!parent) return [];
 
-  const ensNames = knownEnsNamesForParent(parent);
+  const ensNames = await knownEnsNamesForDiscovery(parent);
   const discovered: AgentRegistrationRecord[] = [];
 
   for (const ensName of ensNames) {
