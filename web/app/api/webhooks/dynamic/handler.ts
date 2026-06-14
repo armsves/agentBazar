@@ -86,12 +86,6 @@ export async function handleWebhookRequest(request: NextRequest) {
     case "wallet.delegation.revoked":
       result = await handleDelegationRevoked(payload);
       break;
-
-    default:
-      return NextResponse.json(
-        { success: true, message: `Ignored event: ${payload.eventName}` },
-        { status: 200 }
-      );
   }
 
   return NextResponse.json(result, {
