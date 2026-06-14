@@ -117,7 +117,7 @@ async function verifyV4Withdraw(tokenId: string): Promise<void> {
   assertGuardrails(grant, "v4", 0n, built.compile, OWNER, "withdraw");
 
   console.log(
-    `  ✓ composer-v4-lp withdraw tokenId=${tokenId} — compile OK, guardrails OK, nftOwner=${built.nftOwner}, needsNftApproval=${built.needsNftApproval}`,
+    `  ✓ composer-v4-lp withdraw tokenId=${tokenId} — compile OK, guardrails OK, nftOwner=${built.nftOwner}, mode=${built.executionMode}, approvals=${built.needsNftApproval}`,
   );
 }
 

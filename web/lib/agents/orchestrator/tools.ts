@@ -424,6 +424,7 @@ export function createOrchestratorTools(
             userProxy: result.preview.userProxy,
             nftOwner: result.preview.nftOwner,
             needsNftApproval: result.preview.needsNftApproval,
+            executionMode: result.preview.executionMode,
             approvalsRequired: result.preview.compile.approvals?.length ?? 0,
           };
         } catch (err) {
@@ -459,30 +460,37 @@ export function createOrchestratorTools(
           };
         }
 
-        const result = await executeAgentAction({
-          userId: context.userId,
-          agentId,
-          input: {
-            address,
-            chain,
+        try {
+          const result = await executeAgentAction({
+            userId: context.userId,
+            agentId,
+            input: {
+              address,
+              chain,
+              action: "withdraw",
+              tokenId,
+              dryRun: false,
+            },
+          });
+
+          if (result.dryRun) {
+            return { success: false, error: "Expected execution result" };
+          }
+
+          return {
+            success: true,
             action: "withdraw",
-            tokenId,
-            dryRun: false,
-          },
-        });
-
-        if (result.dryRun) {
-          return { success: false, error: "Expected execution result" };
+            composeHash: result.result.composeHash,
+            explorerUrl: `https://optimistic.etherscan.io/tx/${result.result.composeHash}`,
+            approvalCount: result.result.approvalHashes.length,
+            userProxy: result.result.userProxy,
+          };
+        } catch (err) {
+          return {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
         }
-
-        return {
-          success: true,
-          action: "withdraw",
-          composeHash: result.result.composeHash,
-          explorerUrl: `https://optimistic.etherscan.io/tx/${result.result.composeHash}`,
-          approvalCount: result.result.approvalHashes.length,
-          userProxy: result.result.userProxy,
-        };
       },
     }),
 

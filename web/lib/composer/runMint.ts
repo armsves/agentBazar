@@ -46,6 +46,7 @@ export interface BuildWithdrawResult {
   readonly userProxy?: string;
   readonly nftOwner?: string;
   readonly needsNftApproval?: boolean;
+  readonly executionMode?: "composer" | "direct";
   readonly compile: CompiledDeposit;
 }
 
@@ -175,17 +176,58 @@ export async function buildAndCompileWithdraw(
   const baseUrl = env.COMPOSER_BASE_URL ?? "https://composer.li.quest";
   const sdk = createComposeSdk({ baseUrl, apiKey: env.LIFI_API_KEY });
 
-  const built =
-    input.version === "v4"
-      ? await buildWithdrawUniswapV4({
-          owner: input.owner,
-          tokenId: input.tokenId as `${bigint}`,
-        })
-      : await buildWithdrawUniswapV3({
-          owner: input.owner,
-          tokenId: input.tokenId as `${bigint}`,
-          liquidity: input.liquidity as `${bigint}` | undefined,
-        });
+  if (input.version === "v4") {
+    const built = await buildWithdrawUniswapV4({
+      owner: input.owner,
+      tokenId: input.tokenId as `${bigint}`,
+    });
+
+    if (built.mode === "direct") {
+      const compile = {
+        status: "success",
+        transactionRequest: built.transactionRequest,
+        userProxy: built.userProxy,
+        approvals: [],
+        producedResources: {},
+      } as unknown as CompiledDeposit;
+
+      return {
+        version: input.version,
+        tokenId: input.tokenId,
+        userProxy: built.userProxy,
+        nftOwner: built.nftOwner,
+        needsNftApproval: false,
+        executionMode: "direct",
+        compile,
+      };
+    }
+
+    const result = await sdk.client.compile(built.request);
+
+    if (result.status !== "success") {
+      const message = result.error.message;
+      const revert = result.simulationRevert
+        ? ` — ${result.simulationRevert}`
+        : "";
+      throw new Error(`Compile failed: ${message}${revert}`);
+    }
+
+    return {
+      version: input.version,
+      tokenId: input.tokenId,
+      userProxy: result.userProxy ?? built.userProxy,
+      nftOwner: built.nftOwner,
+      needsNftApproval: false,
+      executionMode: "composer",
+      compile: result,
+    };
+  }
+
+  const built = await buildWithdrawUniswapV3({
+    owner: input.owner,
+    tokenId: input.tokenId as `${bigint}`,
+    liquidity: input.liquidity as `${bigint}` | undefined,
+  });
 
   const result = await sdk.client.compile(built.request);
 
@@ -203,11 +245,11 @@ export async function buildAndCompileWithdraw(
       ? [
           ...(result.approvals ?? []),
           {
-            token: input.version === "v4" ? "v4-position-nft" : "v3-position-nft",
+            token: "v3-position-nft",
             spender: built.userProxy,
             amount: "0",
             transactionRequest: buildNftApprovalForWithdraw(
-              input.version,
+              "v3",
               built.userProxy as Address,
             ).transactionRequest,
           },
@@ -218,11 +260,11 @@ export async function buildAndCompileWithdraw(
   return {
     version: input.version,
     tokenId: input.tokenId,
-    liquidity:
-      "liquidity" in built ? built.liquidity?.toString() : undefined,
+    liquidity: built.liquidity?.toString(),
     userProxy: result.userProxy ?? built.userProxy,
     nftOwner: built.nftOwner,
     needsNftApproval: built.needsNftApproval,
+    executionMode: "composer",
     compile,
   };
 }

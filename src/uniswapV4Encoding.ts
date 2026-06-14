@@ -30,6 +30,7 @@ const SQRT_RATIO_MAX =
 const ACTIONS_MINT_POSITION = 0x02;
 const ACTIONS_SETTLE_PAIR = 0x0d;
 const ACTIONS_BURN_POSITION = 0x03;
+const ACTIONS_TAKE_PAIR = 0x11;
 
 const mulDiv = (a: bigint, b: bigint, denominator: bigint): bigint =>
   (a * b) / denominator;
@@ -217,14 +218,19 @@ export const encodeV4BurnPositionCalldata = ({
   tokenId,
   amount0Min,
   amount1Min,
+  recipient,
   deadline,
 }: {
   readonly tokenId: bigint;
   readonly amount0Min: bigint;
   readonly amount1Min: bigint;
+  readonly recipient: `0x${string}`;
   readonly deadline: bigint;
 }): `0x${string}` => {
-  const actions = encodePacked(['uint8'], [ACTIONS_BURN_POSITION]);
+  const actions = encodePacked(
+    ['uint8', 'uint8'],
+    [ACTIONS_BURN_POSITION, ACTIONS_TAKE_PAIR],
+  );
 
   const burnParams = encodeAbiParameters(
     parseAbiParameters(
@@ -233,9 +239,14 @@ export const encodeV4BurnPositionCalldata = ({
     [tokenId, amount0Min, amount1Min, '0x'],
   );
 
+  const takeParams = encodeAbiParameters(
+    parseAbiParameters('address currency0, address currency1, address recipient'),
+    [USDC, USDT, recipient],
+  );
+
   const unlockData = encodeAbiParameters(
     parseAbiParameters('bytes actions, bytes[] params'),
-    [actions, [burnParams]],
+    [actions, [burnParams, takeParams]],
   );
 
   return encodeFunctionData({

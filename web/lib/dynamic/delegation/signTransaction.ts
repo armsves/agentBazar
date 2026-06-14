@@ -50,7 +50,7 @@ export async function signAndBroadcastTransaction(
   gas = (gas * 120n) / 100n;
 
   const [nonce, feeData] = await Promise.all([
-    publicClient.getTransactionCount({ address: from }),
+    publicClient.getTransactionCount({ address: from, blockTag: "pending" }),
     publicClient.estimateFeesPerGas(),
   ]);
 

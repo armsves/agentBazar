@@ -8,14 +8,8 @@ import {
   UNISWAP_V3_POSITION_MANAGER,
   UNISWAP_V4_POSITION_MANAGER,
 } from './optimism.js';
-import {
-  isPositionNftApprovedForOperator,
-  readPositionNftOwner,
-} from './positions.js';
-import {
-  encodeErc721SafeTransferFromCalldata,
-  encodeErc721SetApprovalForAllCalldata,
-} from './uniswapV3Encoding.js';
+import { readPositionNftOwner } from './positions.js';
+import { encodeErc721SetApprovalForAllCalldata } from './uniswapV3Encoding.js';
 import { encodeV4BurnPositionCalldata } from './uniswapV4Encoding.js';
 
 export interface WithdrawUniswapV4Input {
@@ -25,6 +19,27 @@ export interface WithdrawUniswapV4Input {
   readonly userProxy?: Address;
 }
 
+export type WithdrawUniswapV4Build =
+  | {
+      readonly mode: 'direct';
+      readonly transactionRequest: {
+        readonly to: Address;
+        readonly data: `0x${string}`;
+        readonly value: '0';
+      };
+      readonly userProxy: Address;
+      readonly nftOwner: Address;
+      readonly needsNftApproval: false;
+    }
+  | {
+      readonly mode: 'composer';
+      readonly flow: Flow;
+      readonly request: ComposeCompileRequest;
+      readonly userProxy: Address;
+      readonly nftOwner: Address;
+      readonly needsNftApproval: false;
+    };
+
 const permit2Expiration = (): number =>
   Math.floor(Date.now() / 1000) + 3600;
 
@@ -33,35 +48,40 @@ const resolveUserProxy = async (
   owner: Address,
   tokenId: `${bigint}`,
 ): Promise<Address> => {
-  const built = buildWithdrawFlow({
+  const built = buildComposerWithdrawFlow({
     owner,
     tokenId,
-    userProxy: owner,
-    nftOwner: owner,
-    transferFromWallet: false,
+    recipient: owner,
   });
 
   const result = await sdk.client.compile(built.request);
   return result.userProxy as Address;
 };
 
-const buildWithdrawFlow = ({
+const buildBurnCalldata = (
+  tokenId: `${bigint}`,
+  recipient: Address,
+): `0x${string}` =>
+  encodeV4BurnPositionCalldata({
+    tokenId: BigInt(tokenId),
+    amount0Min: 0n,
+    amount1Min: 0n,
+    recipient,
+    deadline: BigInt(permit2Expiration()),
+  });
+
+const buildComposerWithdrawFlow = ({
   owner,
   tokenId,
-  userProxy,
-  nftOwner,
-  transferFromWallet,
-}: WithdrawUniswapV4Input & {
-  readonly userProxy: Address;
-  readonly nftOwner: Address;
-  readonly transferFromWallet: boolean;
+  recipient,
+}: {
+  readonly owner: Address;
+  readonly tokenId: `${bigint}`;
+  readonly recipient: Address;
 }): {
   flow: Flow;
   request: ComposeCompileRequest;
 } => {
-  const tokenIdBig = BigInt(tokenId);
-  const deadline = BigInt(permit2Expiration());
-
   const sdk = createComposeSdk({ baseUrl: BASE_URL, apiKey: API_KEY });
 
   const builder = sdk.flow(OPTIMISM_CHAIN_ID, {
@@ -69,31 +89,11 @@ const buildWithdrawFlow = ({
     inputs: {},
   });
 
-  if (transferFromWallet) {
-    builder.core.rawCall('transfer-nft-to-proxy', {
-      bind: {},
-      config: {
-        target: UNISWAP_V4_POSITION_MANAGER,
-        calldata: encodeErc721SafeTransferFromCalldata({
-          from: nftOwner,
-          to: userProxy,
-          tokenId: tokenIdBig,
-        }),
-        callType: 'Call',
-      },
-    });
-  }
-
   builder.core.rawCall('burn-position', {
     bind: {},
     config: {
       target: UNISWAP_V4_POSITION_MANAGER,
-      calldata: encodeV4BurnPositionCalldata({
-        tokenId: tokenIdBig,
-        amount0Min: 0n,
-        amount1Min: 0n,
-        deadline,
-      }),
+      calldata: buildBurnCalldata(tokenId, recipient),
       callType: 'Call',
     },
   });
@@ -110,20 +110,18 @@ const buildWithdrawFlow = ({
   return { flow, request };
 };
 
+/**
+ * Wallet-held v4 NFTs cannot be transferred into the LiFi user proxy — burn
+ * directly on the PositionManager. Proxy-held NFTs (composer-v4-lp deposits)
+ * burn via Composer.
+ */
 export const buildWithdrawUniswapV4 = async ({
   owner,
   tokenId,
   userProxy: userProxyInput,
-}: WithdrawUniswapV4Input): Promise<{
-  flow: Flow;
-  request: ComposeCompileRequest;
-  userProxy: Address;
-  nftOwner: Address;
-  needsNftApproval: boolean;
-}> => {
+}: WithdrawUniswapV4Input): Promise<WithdrawUniswapV4Build> => {
   const sdk = createComposeSdk({ baseUrl: BASE_URL, apiKey: API_KEY });
-  const tokenIdBig = BigInt(tokenId);
-  const nftOwner = await readPositionNftOwner(tokenIdBig, 'v4');
+  const nftOwner = await readPositionNftOwner(BigInt(tokenId), 'v4');
 
   const userProxy =
     userProxyInput ?? (await resolveUserProxy(sdk, owner, tokenId));
@@ -138,24 +136,32 @@ export const buildWithdrawUniswapV4 = async ({
     );
   }
 
-  const transferFromWallet = nftOwnerLower === ownerLower;
-  const needsNftApproval =
-    transferFromWallet &&
-    !(await isPositionNftApprovedForOperator(owner, userProxy, 'v4'));
+  if (nftOwnerLower === ownerLower) {
+    return {
+      mode: 'direct',
+      transactionRequest: {
+        to: UNISWAP_V4_POSITION_MANAGER,
+        data: buildBurnCalldata(tokenId, owner),
+        value: '0',
+      },
+      userProxy,
+      nftOwner,
+      needsNftApproval: false,
+    };
+  }
 
-  const built = buildWithdrawFlow({
+  const built = buildComposerWithdrawFlow({
     owner,
     tokenId,
-    userProxy,
-    nftOwner,
-    transferFromWallet,
+    recipient: owner,
   });
 
   return {
+    mode: 'composer',
     ...built,
     userProxy,
     nftOwner,
-    needsNftApproval,
+    needsNftApproval: false,
   };
 };
 
