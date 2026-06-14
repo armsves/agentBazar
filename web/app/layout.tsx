@@ -9,9 +9,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "LiFi Composer + Dynamic Delegated Access",
+  title: "Agent Bazar — Dynamic Delegated DeFi Agents",
   description:
-    "Mint Uniswap USDC/USDT liquidity on Optimism via LiFi Composer, signed with Dynamic delegated wallet access.",
+    "Marketplace of DeFi agents that act on your Dynamic embedded wallet via delegated MPC signing, with spend caps and contract guardrails.",
 };
 
 interface RootLayoutProps {

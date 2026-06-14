@@ -9,9 +9,17 @@ import { Button } from "./ui/button";
 
 export default function Header() {
   const navItems = (
-    <Button variant="link" asChild>
-      <Link href="/methods">Methods</Link>
-    </Button>
+    <>
+      <Button variant="link" asChild>
+        <Link href="/agents">Agents</Link>
+      </Button>
+      <Button variant="link" asChild>
+        <Link href="/dashboard">Dashboard</Link>
+      </Button>
+      <Button variant="link" asChild>
+        <Link href="/methods">Methods</Link>
+      </Button>
+    </>
   );
 
   return (

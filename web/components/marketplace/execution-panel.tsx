@@ -11,13 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { Agent } from "@/lib/agents/types";
 import { useDynamicContext } from "@/lib/dynamic";
 import { authFetch } from "@/lib/dynamic/auth-fetch";
 import { useDelegationStatus } from "@/lib/dynamic/delegation/useDelegationStatus";
 
 const OPTIMISM_CHAIN_ID = 10;
 
-interface MintResponse {
+interface ExecuteResponse {
   success: boolean;
   dryRun?: boolean;
   composeHash?: string;
@@ -27,25 +28,36 @@ interface MintResponse {
   liquidity?: string;
   totalUsdcDeposit?: string;
   explorerUrl?: string;
+  guardrails?: { maxUsdcPerTx: string; maxUsdcDaily: string };
   error?: string;
 }
 
-export default function LpMint() {
-  const { primaryWallet, user } = useDynamicContext();
+interface ExecutionPanelProps {
+  agent: Agent;
+  installed: boolean;
+}
+
+export function ExecutionPanel({ agent, installed }: ExecutionPanelProps) {
+  const { primaryWallet } = useDynamicContext();
   const { getEffectiveStatus, hasServerShare } = useDelegationStatus(
     primaryWallet?.address,
     "EVM",
   );
-  const [version, setVersion] = useState<"v3" | "v4">("v3");
+
   const [usdcAmount, setUsdcAmount] = useState("1000000");
   const [usdtAmount, setUsdtAmount] = useState("1000000");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState<"build" | "execute" | null>(
     null,
   );
-  const [result, setResult] = useState<MintResponse | null>(null);
+  const [result, setResult] = useState<ExecuteResponse | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+
+  const address = primaryWallet?.address;
+  const isOnOptimism = chainId === OPTIMISM_CHAIN_ID;
+  const isDelegated =
+    getEffectiveStatus(address) === "delegated" && hasServerShare;
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +67,8 @@ export default function LpMint() {
         setChainId(null);
         return;
       }
-
       const network = await primaryWallet.connector.getNetwork(true);
-      if (!cancelled) {
-        setChainId(Number(network));
-      }
+      if (!cancelled) setChainId(Number(network));
     }
 
     void loadNetwork();
@@ -68,13 +77,8 @@ export default function LpMint() {
     };
   }, [primaryWallet]);
 
-  const address = primaryWallet?.address;
-  const isOnOptimism = chainId === OPTIMISM_CHAIN_ID;
-  const isDelegated = getEffectiveStatus(address) === "delegated" && hasServerShare;
-
   async function handleSwitchToOptimism() {
     if (!primaryWallet) return;
-
     setIsSwitchingNetwork(true);
     try {
       await primaryWallet.switchNetwork(OPTIMISM_CHAIN_ID);
@@ -85,33 +89,31 @@ export default function LpMint() {
     }
   }
 
-  async function handleDeposit(dryRun: boolean) {
-    if (!address || !isDelegated || !isOnOptimism) return;
+  async function handleExecute(dryRun: boolean) {
+    if (!address || !isDelegated || !isOnOptimism || !installed) return;
 
     setIsLoading(true);
     setLoadingAction(dryRun ? "build" : "execute");
     setResult(null);
 
     try {
-      const response = await authFetch("/api/mint", {
+      const response = await authFetch(`/api/agents/${agent.id}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address,
           chain: "EVM",
-          version,
           usdcAmount,
           usdtAmount,
           dryRun,
         }),
       });
-
-      const data = (await response.json()) as MintResponse;
+      const data = (await response.json()) as ExecuteResponse;
       setResult(data);
     } catch (error) {
       setResult({
         success: false,
-        error: error instanceof Error ? error.message : "Deposit request failed",
+        error: error instanceof Error ? error.message : "Execution failed",
       });
     } finally {
       setIsLoading(false);
@@ -120,35 +122,30 @@ export default function LpMint() {
   }
 
   return (
-    <Card className="w-full">
+    <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-lg">
           <Droplets className="size-5" />
-          LiFi Composer LP Deposit
+          Run agent
         </CardTitle>
         <CardDescription>
-          Legacy quick-deposit panel. Install agents from the{" "}
-          <a href="/agents" className="text-primary underline">
-            marketplace
-          </a>{" "}
-          first — mint now requires an active grant and guardrails.
+          Build or execute a {agent.version.toUpperCase()} LP deposit with
+          guardrails enforced before signing.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {!user || !address ? (
+        {!installed ? (
           <p className="text-muted-foreground text-sm">
-            Connect your wallet with Dynamic, then approve delegation below.
+            Install this agent and set spend caps before running.
           </p>
         ) : !isDelegated ? (
           <p className="text-muted-foreground text-sm">
-            Wallet connected ({address.slice(0, 6)}…{address.slice(-4)}). Approve
-            delegation below — the server must receive the webhook share in KV before
-            minting works.
+            Approve wallet delegation on the home page first.
           </p>
         ) : !isOnOptimism ? (
           <div className="space-y-3 text-sm">
             <p className="text-amber-700 dark:text-amber-300">
-              Deposits run on Optimism (chain 10). Your wallet is on chain{" "}
+              Agent runs on Optimism (chain 10). Wallet is on chain{" "}
               {chainId ?? "unknown"}.
             </p>
             <Button
@@ -163,35 +160,12 @@ export default function LpMint() {
                   Switching…
                 </>
               ) : (
-                "Switch wallet to Optimism"
+                "Switch to Optimism"
               )}
             </Button>
           </div>
         ) : (
           <>
-            <p className="text-sm text-green-700 dark:text-green-400">
-              Delegation active — server can sign deposits for this wallet.
-            </p>
-
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={version === "v3" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setVersion("v3")}
-              >
-                Uniswap v3
-              </Button>
-              <Button
-                type="button"
-                variant={version === "v4" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setVersion("v4")}
-              >
-                Uniswap v4
-              </Button>
-            </div>
-
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm">
                 USDC amount (6 decimals)
@@ -212,32 +186,32 @@ export default function LpMint() {
             </div>
 
             <p className="text-muted-foreground text-xs">
-              Total USDC deposit:{" "}
+              Total deposit:{" "}
               {(
                 BigInt(usdcAmount || "0") + BigInt(usdtAmount || "0")
               ).toString()}{" "}
-              (USDC_AMOUNT + USDT_AMOUNT)
+              (6-decimal units)
             </p>
 
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleDeposit(true)}
+                onClick={() => void handleExecute(true)}
                 disabled={isLoading}
               >
                 {isLoading && loadingAction === "build" ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />
-                    Building…
+                    Simulating…
                   </>
                 ) : (
-                  `Build ${version.toUpperCase()} flow`
+                  "Dry run (simulate)"
                 )}
               </Button>
               <Button
                 type="button"
-                onClick={() => handleDeposit(false)}
+                onClick={() => void handleExecute(false)}
                 disabled={isLoading}
               >
                 {isLoading && loadingAction === "execute" ? (
@@ -246,7 +220,7 @@ export default function LpMint() {
                     Executing…
                   </>
                 ) : (
-                  `Execute ${version.toUpperCase()} deposit`
+                  "Execute deposit"
                 )}
               </Button>
             </div>
@@ -264,29 +238,21 @@ export default function LpMint() {
             {result.success ? (
               <div className="flex flex-col gap-1">
                 <p className="font-medium text-green-700 dark:text-green-400">
-                  {result.dryRun ? "Flow built & simulated" : "Deposit executed"}
+                  {result.dryRun ? "Simulation passed guardrails" : "Executed"}
                 </p>
+                {result.guardrails && (
+                  <p className="text-muted-foreground text-xs">
+                    Caps: {Number(result.guardrails.maxUsdcPerTx) / 1e6} USDC/tx
+                  </p>
+                )}
                 {result.userProxy && (
                   <p>
-                    User proxy:{" "}
-                    <code className="text-xs">{result.userProxy}</code>
+                    Proxy: <code className="text-xs">{result.userProxy}</code>
                   </p>
                 )}
                 {result.totalUsdcDeposit && (
-                  <p>Total USDC deposit: {result.totalUsdcDeposit}</p>
+                  <p>Total: {result.totalUsdcDeposit}</p>
                 )}
-                {result.liquidity && <p>v4 liquidity: {result.liquidity}</p>}
-                {result.dryRun && result.approvalsRequired !== undefined && (
-                  <p>Preflight approvals required: {result.approvalsRequired}</p>
-                )}
-                {!result.dryRun &&
-                  result.approvalHashes &&
-                  result.approvalHashes.length > 0 && (
-                    <p>
-                      Approvals: {result.approvalHashes.length} tx
-                      {result.approvalHashes.length > 1 ? "s" : ""}
-                    </p>
-                  )}
                 {result.explorerUrl && (
                   <a
                     href={result.explorerUrl}
