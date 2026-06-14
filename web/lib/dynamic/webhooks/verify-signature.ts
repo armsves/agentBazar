@@ -35,7 +35,9 @@ export async function verifyWebhookSignature(
 > {
   // Get the webhook secret from environment variables
   // In production, consider using a secrets manager instead
-  const webhookSecret = env.DYNAMIC_WEBHOOK_SECRET;
+  const webhookSecret =
+    process.env.DYNAMIC_WEBHOOK_SECRET?.trim() ||
+    env.DYNAMIC_WEBHOOK_SECRET?.trim();
 
   if (!webhookSecret) {
     console.error("DYNAMIC_WEBHOOK_SECRET is not configured");

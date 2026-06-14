@@ -6,16 +6,16 @@ import { env } from "@/env";
  * Gets the formatted private key from environment variables
  */
 function getPrivateKey(): string {
-  const privateKeyPem = env.DYNAMIC_DELEGATION_PRIVATE_KEY;
+  const privateKeyPem =
+    process.env.DYNAMIC_DELEGATION_PRIVATE_KEY?.trim() ||
+    env.DYNAMIC_DELEGATION_PRIVATE_KEY?.trim();
 
   if (!privateKeyPem) {
     throw new Error(
-      "DYNAMIC_DELEGATION_PRIVATE_KEY not found in environment variables. " +
-        "Add your RSA private key to .env.local - see README for setup."
+      "DYNAMIC_DELEGATION_PRIVATE_KEY not found in environment variables.",
     );
   }
 
-  // Format the private key (handles both inline \n and actual newlines)
   return privateKeyPem.replace(/\\n/g, "\n");
 }
 
