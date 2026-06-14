@@ -9,6 +9,7 @@
     "compile": "tsx src/run.ts",
     "typecheck": "tsc --noEmit",
     "dev:web": "npm run dev --prefix web",
+    "verify:kv": "npm run verify:kv --prefix web",
     "build:web": "npm run build --prefix web",
     "install:web": "npm install --prefix web"
   },

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "verify:kv": "tsx scripts/verify-kv.ts"
   },
   "dependencies": {
     "@lifi/compose-spec": "^0.2.0-staging.5",
