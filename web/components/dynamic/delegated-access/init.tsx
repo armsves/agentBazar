@@ -1,25 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Lock, Zap, Loader2, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useDynamicContext, useWalletDelegation } from "@/lib/dynamic";
+import {
+  ChainEnum,
+  useDynamicContext,
+  useWalletDelegation,
+  useWalletPassword,
+} from "@/lib/dynamic";
+import {
+  ensureWalletUnlocked,
+  walletNeedsPassword,
+} from "@/lib/dynamic/delegation/prepareDelegation";
+import { useDelegateWallet } from "@/lib/dynamic/delegation/useDelegateWallet";
+import DelegationPasswordField from "./components/delegation-password-field";
 
 /**
  * DelegatedAccessInit - Delegation with Dynamic's Built-in Modal UI
  *
- * This component demonstrates using initDelegationProcess() which:
- * - Opens Dynamic's pre-built delegation modal
- * - Handles the entire user flow automatically
- * - Shows consent screens and progress indicators
- * - Best for: Quick integration with minimal custom UI work
+ * Password-protected WaaS wallets delegate via delegateKeyShares with unlock.
+ * Other wallets can use Dynamic's modal via initDelegationProcess.
  */
 export default function DelegatedAccessInit() {
   const { primaryWallet } = useDynamicContext();
-  const { initDelegationProcess } = useWalletDelegation();
+  const { getWalletsDelegatedStatus } = useWalletDelegation();
+  const { delegateWallet } = useDelegateWallet();
+  const { checkWalletLockState, unlockWallet } = useWalletPassword();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [walletPassword, setWalletPassword] = useState("");
+  const [passwordRequired, setPasswordRequired] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function detectPasswordWallet() {
+      if (!primaryWallet) {
+        setPasswordRequired(false);
+        return;
+      }
+
+      const needsPassword = await walletNeedsPassword(primaryWallet, {
+        checkWalletLockState,
+        unlockWallet,
+      });
+
+      if (!cancelled) {
+        setPasswordRequired(needsPassword);
+      }
+    }
+
+    void detectPasswordWallet();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryWallet, checkWalletLockState, unlockWallet]);
 
   const handleInitDelegation = async () => {
     if (!primaryWallet) {
@@ -27,10 +65,41 @@ export default function DelegatedAccessInit() {
       return;
     }
 
+    const pendingStatus = getWalletsDelegatedStatus().find(
+      (wallet) =>
+        wallet.address.toLowerCase() === primaryWallet.address.toLowerCase() &&
+        wallet.status === "pending",
+    );
+
+    if (!pendingStatus) {
+      setError(
+        "This wallet is not eligible for delegation. Email login must create a Dynamic WaaS (MPC v4) wallet — enable WaaS in the Dynamic dashboard and sign up with a new email if you see the amber warning above.",
+      );
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
-      await initDelegationProcess({ wallets: [primaryWallet] });
+      setSuccess(null);
+
+      await ensureWalletUnlocked(
+        primaryWallet,
+        { checkWalletLockState, unlockWallet },
+        walletPassword || undefined,
+      );
+
+      const result = await delegateWallet({
+        accountAddress: pendingStatus.address,
+        chainName: pendingStatus.chain as ChainEnum,
+        password: walletPassword || undefined,
+      });
+
+      setSuccess(
+        result.serverStored
+          ? "Delegation active — key share stored in KV. You can build and execute deposits."
+          : "Delegation completed.",
+      );
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Delegation failed";
@@ -52,12 +121,10 @@ export default function DelegatedAccessInit() {
                 <Lock className="w-4 h-4 text-dynamic" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-sm">
-                  initDelegationProcess()
-                </h4>
+                <h4 className="font-medium text-sm">Approve delegation</h4>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Opens Dynamic&apos;s modal to guide users through delegation.
-                  Handles consent, key generation, and success/error states automatically.
+                  Email login does not use a wallet password. This runs
+                  delegation directly for your WaaS wallet.
                 </p>
               </div>
             </div>
@@ -68,31 +135,49 @@ export default function DelegatedAccessInit() {
                 When triggered, the modal will:
               </p>
               <div className="space-y-1.5">
-                <FlowStep number={1} text="Display delegation consent to user" />
+                <FlowStep number={1} text="Confirm delegation for your wallet" />
                 <FlowStep number={2} text="Generate and encrypt MPC key share" />
-                <FlowStep number={3} text="Store encrypted share on server" />
+                <FlowStep number={3} text="Dynamic sends share to your server webhook" />
               </div>
             </div>
+
+            {passwordRequired && (
+              <DelegationPasswordField
+                value={walletPassword}
+                onChange={setWalletPassword}
+                required
+              />
+            )}
 
             {/* Action Button */}
             <Button
               onClick={handleInitDelegation}
               className="w-full bg-dynamic hover:bg-dynamic/90 text-white"
-              disabled={isLoading || !primaryWallet}
+              disabled={
+                isLoading ||
+                !primaryWallet ||
+                (passwordRequired && !walletPassword)
+              }
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Opening Modal...
+                  Delegating…
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
                   <Zap className="w-4 h-4" />
-                  Open Delegation Modal
+                  Approve Delegation
                 </span>
               )}
             </Button>
           </div>
+
+          {success && (
+            <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-3 text-xs text-green-700 dark:text-green-400">
+              {success}
+            </div>
+          )}
 
           {/* Error Display */}
           {error && <ErrorMessage message={error} />}

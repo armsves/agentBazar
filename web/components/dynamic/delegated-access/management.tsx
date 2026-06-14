@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Key,
   Loader2,
@@ -14,8 +14,16 @@ import { Button } from "@/components/ui/button";
 import {
   ChainEnum,
   useDynamicContext,
+  useRefreshAuth,
+  useRefreshUser,
   useWalletDelegation,
+  useWalletPassword,
 } from "@/lib/dynamic";
+import {
+  ensureWalletUnlocked,
+  walletNeedsPassword,
+} from "@/lib/dynamic/delegation/prepareDelegation";
+import DelegationPasswordField from "./components/delegation-password-field";
 
 /**
  * DelegationManagement - Delegation with Custom UI (No Modal)
@@ -28,10 +36,57 @@ export default function DelegationManagement() {
   const { primaryWallet } = useDynamicContext();
   const { delegateKeyShares, getWalletsDelegatedStatus } =
     useWalletDelegation();
+  const { checkWalletLockState, unlockWallet } = useWalletPassword();
+  const refreshAuth = useRefreshAuth();
+  const refreshUser = useRefreshUser();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [walletPassword, setWalletPassword] = useState("");
+  const [passwordRequired, setPasswordRequired] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function detectPasswordWallet() {
+      if (!primaryWallet) {
+        setPasswordRequired(false);
+        return;
+      }
+
+      const needsPassword = await walletNeedsPassword(primaryWallet, {
+        checkWalletLockState,
+        unlockWallet,
+      });
+
+      if (!cancelled) {
+        setPasswordRequired(needsPassword);
+      }
+    }
+
+    void detectPasswordWallet();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryWallet, checkWalletLockState, unlockWallet]);
+
+  const runDelegation = async (
+    wallets: Array<{ chainName: ChainEnum; accountAddress: string }>,
+  ) => {
+    if (!primaryWallet) {
+      throw new Error("No primary wallet connected");
+    }
+
+    await ensureWalletUnlocked(
+      primaryWallet,
+      { checkWalletLockState, unlockWallet },
+      walletPassword || undefined,
+    );
+
+    await delegateKeyShares(wallets, walletPassword || undefined);
+    await Promise.all([refreshAuth(), refreshUser()]);
+  };
 
   // Get delegation status for all wallets from the SDK
   // This is the source of truth for which wallets are eligible for delegation
@@ -70,7 +125,7 @@ export default function DelegationManagement() {
       setError(null);
       setSuccess(null);
 
-      await delegateKeyShares([
+      await runDelegation([
         {
           chainName: primaryWalletStatus.chain as ChainEnum,
           accountAddress: primaryWalletStatus.address,
@@ -102,12 +157,12 @@ export default function DelegationManagement() {
       setError(null);
       setSuccess(null);
 
-      const walletsToDelegate = pendingWallets.map((wallet) => ({
-        chainName: wallet.chain as ChainEnum,
-        accountAddress: wallet.address,
-      }));
-
-      await delegateKeyShares(walletsToDelegate);
+      await runDelegation(
+        pendingWallets.map((wallet) => ({
+          chainName: wallet.chain as ChainEnum,
+          accountAddress: wallet.address,
+        })),
+      );
 
       setSuccess(`${pendingWallets.length} wallet(s) delegated successfully!`);
     } catch (err) {
@@ -156,6 +211,17 @@ export default function DelegationManagement() {
               </div>
             </div>
 
+            {passwordRequired && (
+              <DelegationPasswordField
+                value={walletPassword}
+                onChange={(value) => {
+                  clearMessages();
+                  setWalletPassword(value);
+                }}
+                required
+              />
+            )}
+
             {/* Action Buttons */}
             <div className="flex gap-2">
               {/* Delegate Primary Only */}
@@ -163,7 +229,11 @@ export default function DelegationManagement() {
                 variant="outline"
                 className="flex-1"
                 onClick={handleDelegatePrimary}
-                disabled={isLoading || !isPrimaryPending}
+                disabled={
+                  isLoading ||
+                  !isPrimaryPending ||
+                  (passwordRequired && !walletPassword)
+                }
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
@@ -187,7 +257,11 @@ export default function DelegationManagement() {
                 variant="outline"
                 className="flex-1"
                 onClick={handleDelegateAll}
-                disabled={isLoading || pendingWallets.length === 0}
+                disabled={
+                  isLoading ||
+                  pendingWallets.length === 0 ||
+                  (passwordRequired && !walletPassword)
+                }
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
