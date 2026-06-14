@@ -11,14 +11,8 @@ export default function Footer({
   bottomLinks = [
     {
       text: "GitHub",
-      url: "https://github.com/dynamic-labs/examples/tree/main/examples/nextjs-delegated-access",
+      url: "https://github.com/armsves/agentBazar",
     },
-    {
-      text: "Docs",
-      url: "https://www.dynamic.xyz/docs/wallets/embedded-wallets/mpc/delegated-access/overview",
-    },
-    { text: "Dashboard", url: "https://app.dynamic.xyz" },
-    { text: "Support", url: "https://www.dynamic.xyz/join-slack" },
   ],
 }: FooterProps) {
   return (

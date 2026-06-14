@@ -25,9 +25,6 @@ export default function Header() {
       <Button variant="link" asChild>
         <Link href="/setup">Setup</Link>
       </Button>
-      <Button variant="link" asChild>
-        <Link href="/methods">Methods</Link>
-      </Button>
     </>
   );
 

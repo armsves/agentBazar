@@ -41,11 +41,12 @@ const sponsors = [
     name: "LI.FI",
     href: "https://li.fi",
     render: () => (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src="/sponsors/lifi.svg"
+      <Image
+        src="/sponsors/lifi.png"
         alt="LI.FI"
-        className="h-[16px] w-auto dark:invert"
+        width={72}
+        height={18}
+        className="h-[16px] w-auto invert dark:invert-0"
       />
     ),
   },
