@@ -11,7 +11,7 @@
  * - DYNAMIC_DELEGATION_PRIVATE_KEY: RSA private key for decrypting delegation shares
  *
  * Optional variables:
- * - KV_URL: Redis connection URL (defaults to redis://localhost:6379)
+ * - KV_URL: Redis connection URL (optional; remote Upstash URL, not localhost)
  * - KV_REST_API_URL: Vercel KV REST API URL
  * - KV_REST_API_TOKEN: Vercel KV REST API token
  */
