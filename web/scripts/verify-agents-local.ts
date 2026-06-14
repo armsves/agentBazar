@@ -8,6 +8,7 @@ import { AGENT_REGISTRY } from "@/lib/agents/registry";
 import { runDepositFlow } from "@/lib/agents/lp-actions";
 import type { UserAgentGrant } from "@/lib/agents/types";
 import { assertGuardrails } from "@/lib/guardrails/engine";
+import { buildAndCompileWithdraw } from "@/lib/composer/runMint";
 import { fetchEarnVaults, suggestPortfolioBalance } from "@/lib/earn/vaults";
 
 const OWNER = "0x08260cf1ac569220d871e92f881153fd6bc01895" as Address;
@@ -101,6 +102,25 @@ async function verifyEarnBalancer(): Promise<void> {
   );
 }
 
+async function verifyV4Withdraw(tokenId: string): Promise<void> {
+  const built = await buildAndCompileWithdraw({
+    owner: OWNER,
+    version: "v4",
+    tokenId,
+  });
+
+  if (built.compile.status !== "success") {
+    throw new Error(`Withdraw compile failed for token ${tokenId}`);
+  }
+
+  const grant = makeGrant("composer-v4-lp", "v4");
+  assertGuardrails(grant, "v4", 0n, built.compile, OWNER, "withdraw");
+
+  console.log(
+    `  ✓ composer-v4-lp withdraw tokenId=${tokenId} — compile OK, guardrails OK, nftOwner=${built.nftOwner}, needsNftApproval=${built.needsNftApproval}`,
+  );
+}
+
 async function verifyRegistry(): Promise<void> {
   const ids = AGENT_REGISTRY.map((a) => a.id);
   const expected = [
@@ -164,6 +184,9 @@ async function main(): Promise<void> {
 
   console.log("\nAdvisor:");
   await verifyEarnBalancer();
+
+  console.log("\nLP withdraw dry-runs:");
+  await verifyV4Withdraw("26311");
 
   console.log("\nAll checks passed.");
 }

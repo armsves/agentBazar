@@ -10,7 +10,10 @@ import type { DelegationRecord } from "@/lib/dynamic/delegation/types";
 import { buildMintUniswapV3 } from "../../../src/mintUniswapV3";
 import { buildMintUniswapV4 } from "../../../src/mintUniswapV4";
 import { buildWithdrawUniswapV3 } from "../../../src/withdrawUniswapV3";
-import { buildWithdrawUniswapV4 } from "../../../src/withdrawUniswapV4";
+import {
+  buildNftApprovalForWithdraw,
+  buildWithdrawUniswapV4,
+} from "../../../src/withdrawUniswapV4";
 import {
   OPTIMISM_CHAIN_ID,
   POOL_FEE,
@@ -41,6 +44,8 @@ export interface BuildWithdrawResult {
   readonly tokenId: string;
   readonly liquidity?: string;
   readonly userProxy?: string;
+  readonly nftOwner?: string;
+  readonly needsNftApproval?: boolean;
   readonly compile: CompiledDeposit;
 }
 
@@ -192,13 +197,33 @@ export async function buildAndCompileWithdraw(
     throw new Error(`Compile failed: ${message}${revert}`);
   }
 
+  const compile = {
+    ...result,
+    approvals: built.needsNftApproval
+      ? [
+          ...(result.approvals ?? []),
+          {
+            token: input.version === "v4" ? "v4-position-nft" : "v3-position-nft",
+            spender: built.userProxy,
+            amount: "0",
+            transactionRequest: buildNftApprovalForWithdraw(
+              input.version,
+              built.userProxy as Address,
+            ).transactionRequest,
+          },
+        ]
+      : result.approvals,
+  } as CompiledDeposit;
+
   return {
     version: input.version,
     tokenId: input.tokenId,
     liquidity:
       "liquidity" in built ? built.liquidity?.toString() : undefined,
-    userProxy: result.userProxy,
-    compile: result,
+    userProxy: result.userProxy ?? built.userProxy,
+    nftOwner: built.nftOwner,
+    needsNftApproval: built.needsNftApproval,
+    compile,
   };
 }
 

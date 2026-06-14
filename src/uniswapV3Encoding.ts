@@ -161,3 +161,33 @@ export const encodeV3SwapUsdtToUsdcCalldata = ({
 
 export const UNISWAP_V3_PM = UNISWAP_V3_POSITION_MANAGER;
 export const UNISWAP_V3_ROUTER = UNISWAP_V3_SWAP_ROUTER;
+
+const erc721Abi = parseAbi([
+  'function setApprovalForAll(address operator, bool approved)',
+  'function safeTransferFrom(address from, address to, uint256 tokenId)',
+]);
+
+export const encodeErc721SetApprovalForAllCalldata = (
+  operator: `0x${string}`,
+  approved = true,
+): `0x${string}` =>
+  encodeFunctionData({
+    abi: erc721Abi,
+    functionName: 'setApprovalForAll',
+    args: [operator, approved],
+  });
+
+export const encodeErc721SafeTransferFromCalldata = ({
+  from,
+  to,
+  tokenId,
+}: {
+  readonly from: `0x${string}`;
+  readonly to: `0x${string}`;
+  readonly tokenId: bigint;
+}): `0x${string}` =>
+  encodeFunctionData({
+    abi: erc721Abi,
+    functionName: 'safeTransferFrom',
+    args: [from, to, tokenId],
+  });

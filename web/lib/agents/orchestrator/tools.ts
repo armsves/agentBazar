@@ -399,30 +399,39 @@ export function createOrchestratorTools(
         tokenId: z.string().regex(/^\d+$/).describe("Uniswap LP position NFT token id"),
       }),
       execute: async ({ agentId, tokenId }) => {
-        const result = await executeAgentAction({
-          userId: context.userId,
-          agentId,
-          input: {
-            address,
-            chain,
-            action: "withdraw",
-            tokenId,
-            dryRun: true,
-          },
-        });
+        try {
+          const result = await executeAgentAction({
+            userId: context.userId,
+            agentId,
+            input: {
+              address,
+              chain,
+              action: "withdraw",
+              tokenId,
+              dryRun: true,
+            },
+          });
 
-        if (!result.dryRun || result.action !== "withdraw") {
-          return { success: false, error: "Expected withdraw dry-run result" };
+          if (!result.dryRun || result.action !== "withdraw") {
+            return { success: false, error: "Expected withdraw dry-run result" };
+          }
+
+          return {
+            success: true,
+            agentId,
+            tokenId: result.preview.tokenId,
+            liquidity: result.preview.liquidity,
+            userProxy: result.preview.userProxy,
+            nftOwner: result.preview.nftOwner,
+            needsNftApproval: result.preview.needsNftApproval,
+            approvalsRequired: result.preview.compile.approvals?.length ?? 0,
+          };
+        } catch (err) {
+          return {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
         }
-
-        return {
-          success: true,
-          agentId,
-          tokenId: result.preview.tokenId,
-          liquidity: result.preview.liquidity,
-          userProxy: result.preview.userProxy,
-          approvalsRequired: result.preview.compile.approvals?.length ?? 0,
-        };
       },
     }),
 
