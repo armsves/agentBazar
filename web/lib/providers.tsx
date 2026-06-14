@@ -14,12 +14,14 @@
 "use client";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import DynamicNonceGuard from "@/components/dynamic/dynamic-nonce-guard";
 import { env } from "@/env";
 import {
   DynamicContextProvider,
   EthereumWalletConnectors,
   ZeroDevSmartWalletConnectors,
 } from "@/lib/dynamic";
+import { fetchAndStoreNonce } from "@/lib/dynamic/nonce";
 
 const cssOverrides = `
   /* Hide the separator line above "Powered by" */
@@ -49,9 +51,35 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             EthereumWalletConnectors,
             ZeroDevSmartWalletConnectors,
           ],
+          // Verify on connect instead of after an in-modal network switch.
+          // The SDK re-verifies after "Select Optimism" without refetching nonce.
+          networkValidationMode: "never",
+          overrides: {
+            evmNetworks: (networks) =>
+              networks.filter((network) => network.chainId === 10),
+          },
+          events: {
+            onAuthFlowOpen: () => {
+              void fetchAndStoreNonce();
+            },
+            onAuthFailure: (_data, reason) => {
+              const message =
+                typeof reason === "object" &&
+                reason !== null &&
+                "message" in reason &&
+                typeof reason.message === "string"
+                  ? reason.message
+                  : "";
+
+              if (message.includes("Nonce is not defined")) {
+                void fetchAndStoreNonce();
+              }
+            },
+          },
           cssOverrides,
         }}
       >
+        <DynamicNonceGuard />
         {children}
       </DynamicContextProvider>
     </ThemeProvider>
