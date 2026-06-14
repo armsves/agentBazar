@@ -26,8 +26,14 @@ export async function GET(_req: Request, { params }: RouteParams) {
           "install_agent",
           "simulate_deposit",
           "execute_deposit",
+          "simulate_withdraw",
+          "execute_withdraw",
+          "fetch_earn_vaults",
+          "suggest_portfolio_balance",
         ]
-      : ["simulate_deposit", "execute_deposit"];
+      : agent.kind === "advisor"
+        ? ["fetch_earn_vaults", "suggest_portfolio_balance"]
+        : ["simulate_deposit", "execute_deposit"];
 
   return NextResponse.json({
     name: agent.name,

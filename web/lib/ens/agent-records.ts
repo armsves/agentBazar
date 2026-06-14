@@ -22,6 +22,9 @@ function subdomain(agent: Agent): string {
   if (agent.id === "uniswap-v3-lp") return "v3-lp";
   if (agent.id === "uniswap-v4-lp") return "v4-lp";
   if (agent.id === "lifidynamicens-lp") return "lifidynamicens-lp";
+  if (agent.id === "composer-v3-lp") return "composer-v3-lp";
+  if (agent.id === "composer-v4-lp") return "composer-v4-lp";
+  if (agent.id === "lifi-earn-balancer") return "lifi-earn-balancer";
   return agent.id.replace(/[^a-z0-9-]/g, "-");
 }
 
@@ -48,7 +51,7 @@ ${agent.capabilities.map((c) => `- ${c}`).join("\n")}
 
 ## How to interact
 - Web UI: ${base}/agents/${agent.id}
-${agent.kind === "orchestrator" ? `- Chat: ${base}/chat` : `- Execute API: POST ${base}/api/agents/${agent.id}/execute`}
+${agent.kind === "orchestrator" ? `- Chat: ${base}/chat` : agent.kind === "advisor" ? `- Advisor chat: ${base}/agents/${agent.id}` : `- Execute API: POST ${base}/api/agents/${agent.id}/execute`}
 - Marketplace: ${base}/agents
 
 ## Guardrails

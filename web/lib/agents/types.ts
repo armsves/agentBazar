@@ -1,8 +1,11 @@
-export type AgentCapability = "uniswap-v3-lp" | "uniswap-v4-lp";
+export type AgentCapability =
+  | "uniswap-v3-lp"
+  | "uniswap-v4-lp"
+  | "earn-portfolio";
 
 export type UniswapVersion = "v3" | "v4";
 
-export type AgentKind = "orchestrator" | "specialist";
+export type AgentKind = "orchestrator" | "specialist" | "advisor";
 
 export interface Agent {
   id: string;
@@ -45,10 +48,15 @@ export interface AgentExecutionLog {
   timestamp: string;
 }
 
+export type AgentLpAction = "deposit" | "withdraw";
+
 export interface AgentExecuteInput {
   address: string;
   chain: string;
+  action?: AgentLpAction;
   usdcAmount?: string;
   usdtAmount?: string;
+  tokenId?: string;
+  liquidity?: string;
   dryRun?: boolean;
 }

@@ -27,6 +27,8 @@ export interface MintUniswapV3Input {
   readonly usdtAmount: `${bigint}`;
   readonly slippageBps?: number;
   readonly userProxy?: Address;
+  /** Where the LP NFT is minted — use userProxy for composer withdraw compatibility. */
+  readonly lpRecipient?: Address;
 }
 
 const bpsMin = (amount: `${bigint}`, bps: number): bigint => {
@@ -58,6 +60,7 @@ const resolveUserProxy = async (
     usdtAmount,
     slippageBps,
     swapRecipient: owner,
+    lpRecipient: owner,
     simulationPolicy: 'allow-revert',
   });
 
@@ -72,9 +75,11 @@ const buildMintFlow = ({
   usdtAmount,
   slippageBps = 100,
   swapRecipient,
+  lpRecipient,
   simulationPolicy,
 }: MintUniswapV3Input & {
   readonly swapRecipient: Address;
+  readonly lpRecipient: Address;
   readonly simulationPolicy?: 'allow-revert';
 }): {
   flow: Flow;
@@ -137,7 +142,7 @@ const buildMintFlow = ({
     usdtAmount: mintAmount1,
     amount0Min: bpsMin(usdcAmount, slippageBps + 50),
     amount1Min: bpsMin(usdtAmount, slippageBps + 50),
-    recipient: owner,
+    recipient: lpRecipient,
   });
 
   builder.core.rawCall('mint-position', {
@@ -185,6 +190,7 @@ export const buildMintUniswapV3 = async ({
   usdtAmount,
   slippageBps = 100,
   userProxy: userProxyInput,
+  lpRecipient: lpRecipientInput,
 }: MintUniswapV3Input): Promise<{
   flow: Flow;
   request: ComposeCompileRequest;
@@ -194,6 +200,7 @@ export const buildMintUniswapV3 = async ({
   const userProxy =
     userProxyInput ??
     (await resolveUserProxy(sdk, owner, usdcAmount, usdtAmount, slippageBps));
+  const lpRecipient = lpRecipientInput ?? owner;
 
   const built = buildMintFlow({
     owner,
@@ -201,6 +208,7 @@ export const buildMintUniswapV3 = async ({
     usdtAmount,
     slippageBps,
     swapRecipient: userProxy,
+    lpRecipient,
   });
 
   return { ...built, userProxy };

@@ -19,6 +19,9 @@ const SUBDOMAIN_TO_AGENT_ID: Record<string, string> = {
   "v3-lp": "uniswap-v3-lp",
   "v4-lp": "uniswap-v4-lp",
   "lifidynamicens-lp": "lifidynamicens-lp",
+  "composer-v3-lp": "composer-v3-lp",
+  "composer-v4-lp": "composer-v4-lp",
+  "lifi-earn-balancer": "lifi-earn-balancer",
 };
 
 function subdomainFromEnsName(ensName: string, parent: string): string {
@@ -53,13 +56,19 @@ function inferAgentFromContext(params: {
   if (capsSection?.[1]) {
     for (const line of capsSection[1].split("\n")) {
       const cap = line.replace(/^-\s*/, "").trim();
-      if (cap === "uniswap-v3-lp" || cap === "uniswap-v4-lp") {
+      if (
+        cap === "uniswap-v3-lp" ||
+        cap === "uniswap-v4-lp" ||
+        cap === "earn-portfolio"
+      ) {
         capabilities.push(cap);
       }
     }
   }
   if (!capabilities.length) {
-    if (params.agentId.includes("v4")) capabilities.push("uniswap-v4-lp");
+    if (params.agentId.includes("earn") || params.agentId.includes("balancer")) {
+      capabilities.push("earn-portfolio");
+    } else if (params.agentId.includes("v4")) capabilities.push("uniswap-v4-lp");
     else if (params.agentId.includes("v3") || params.agentId.includes("lp")) {
       capabilities.push("uniswap-v3-lp");
     }

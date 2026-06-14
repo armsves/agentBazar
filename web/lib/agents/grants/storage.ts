@@ -49,7 +49,8 @@ export async function installGrant(params: {
   const now = new Date().toISOString();
 
   const agent = await getAgentByIdMerged(params.agentId);
-  const allowedVersions: UniswapVersion[] = agent ? [agent.version] : [];
+  const allowedVersions: UniswapVersion[] =
+    agent?.kind === "advisor" ? [] : agent ? [agent.version] : [];
 
   const grant: UserAgentGrant = {
     userId: params.userId,

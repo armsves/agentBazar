@@ -7,12 +7,13 @@ import {
   withAllowedVersion,
   persistGrant,
 } from "@/lib/agents/grants/storage";
+import { runDepositFlow, runWithdrawFlow } from "@/lib/agents/lp-actions";
 import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
-import type { AgentExecuteInput } from "@/lib/agents/types";
+import type { AgentExecuteInput, AgentLpAction } from "@/lib/agents/types";
 import {
-  buildAndCompileDeposit,
   executeCompiledDeposit,
   type BuildDepositResult,
+  type BuildWithdrawResult,
   type ExecuteDepositResult,
 } from "@/lib/composer/runMint";
 import { getDelegationByAddress } from "@/lib/dynamic/delegation/storage";
@@ -22,12 +23,21 @@ import { assertGuardrails } from "@/lib/guardrails/engine";
 export type AgentExecuteResult =
   | {
       dryRun: true;
+      action: "deposit";
       preview: BuildDepositResult;
       agentId: string;
       grant: { maxUsdcPerTx: string; maxUsdcDaily: string };
     }
   | {
+      dryRun: true;
+      action: "withdraw";
+      preview: BuildWithdrawResult;
+      agentId: string;
+      grant: { maxUsdcPerTx: string; maxUsdcDaily: string };
+    }
+  | {
       dryRun: false;
+      action: AgentLpAction;
       result: ExecuteDepositResult & { liquidity?: string };
       agentId: string;
     };
@@ -46,6 +56,7 @@ export async function executeAgentAction(params: {
   const address = params.input.address.toLowerCase() as Address;
   const dryRun = params.input.dryRun ?? false;
   const version = agent.version;
+  const action: AgentLpAction = params.input.action ?? "deposit";
 
   let grant = await getGrant(params.userId, params.agentId);
   if (!grant) {
@@ -76,19 +87,84 @@ export async function executeAgentAction(params: {
     );
   }
 
-  const built = await buildAndCompileDeposit({
+  if (action === "withdraw") {
+    const built = await runWithdrawFlow({
+      owner: address,
+      version,
+      input: params.input,
+    });
+
+    assertGuardrails(grant, version, 0n, built.compile, address, "withdraw");
+
+    if (dryRun) {
+      return {
+        dryRun: true,
+        action: "withdraw",
+        preview: built,
+        agentId: params.agentId,
+        grant: {
+          maxUsdcPerTx: grant.maxUsdcPerTx,
+          maxUsdcDaily: grant.maxUsdcDaily,
+        },
+      };
+    }
+
+    try {
+      const result = await executeCompiledDeposit(
+        address,
+        delegation,
+        built.compile,
+      );
+
+      await logExecution({
+        userId: params.userId,
+        agentId: params.agentId,
+        walletAddress: address,
+        version,
+        usdcAmount: "0",
+        usdtAmount: "0",
+        dryRun: false,
+        status: "success",
+        composeHash: result.composeHash,
+      });
+
+      return {
+        dryRun: false,
+        action: "withdraw",
+        result: { ...result, liquidity: built.liquidity },
+        agentId: params.agentId,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await logExecution({
+        userId: params.userId,
+        agentId: params.agentId,
+        walletAddress: address,
+        version,
+        usdcAmount: "0",
+        usdtAmount: "0",
+        dryRun: false,
+        status: "failed",
+        error: message,
+      });
+      throw error;
+    }
+  }
+
+  const built = await runDepositFlow({
     owner: address,
     version,
-    usdcAmount: params.input.usdcAmount,
-    usdtAmount: params.input.usdtAmount,
+    agentId: params.agentId,
+    input: params.input,
   });
 
   const totalUsdc = BigInt(built.totalUsdcDeposit);
-  assertGuardrails(grant, version, totalUsdc, built.compile, address);
+  assertGuardrails(grant, version, totalUsdc, built.compile, address, "deposit");
 
   if (dryRun) {
     return {
       dryRun: true,
+      action: "deposit",
       preview: built,
       agentId: params.agentId,
       grant: {
@@ -121,6 +197,7 @@ export async function executeAgentAction(params: {
 
     return {
       dryRun: false,
+      action: "deposit",
       result: { ...result, liquidity: built.liquidity },
       agentId: params.agentId,
     };

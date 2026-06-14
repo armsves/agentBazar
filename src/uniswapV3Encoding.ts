@@ -18,6 +18,11 @@ const swapRouterAbi = parseAbi([
   'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) returns (uint256 amountOut)',
 ]);
 
+const withdrawAbi = parseAbi([
+  'function decreaseLiquidity((uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min, uint256 deadline) params) external payable returns (uint256 amount0, uint256 amount1)',
+  'function collect((uint256 tokenId, address recipient, uint128 amount0Max, uint128 amount1Max) params) external payable returns (uint256 amount0, uint256 amount1)',
+]);
+
 export interface EncodeV3MintInput {
   readonly usdcAmount: bigint;
   readonly usdtAmount: bigint;
@@ -71,6 +76,80 @@ export const encodeV3ExactInputSingleCalldata = ({
       {
         tokenIn: USDC,
         tokenOut: USDT,
+        fee: POOL_FEE,
+        recipient,
+        amountIn,
+        amountOutMinimum,
+        sqrtPriceLimitX96: 0n,
+      },
+    ],
+  });
+
+export interface EncodeV3WithdrawInput {
+  readonly tokenId: bigint;
+  readonly liquidity: bigint;
+  readonly amount0Min: bigint;
+  readonly amount1Min: bigint;
+}
+
+export const encodeV3DecreaseLiquidityCalldata = ({
+  tokenId,
+  liquidity,
+  amount0Min,
+  amount1Min,
+}: EncodeV3WithdrawInput): `0x${string}` =>
+  encodeFunctionData({
+    abi: withdrawAbi,
+    functionName: 'decreaseLiquidity',
+    args: [
+      {
+        tokenId,
+        liquidity,
+        amount0Min,
+        amount1Min,
+        deadline: 9_999_999_999n,
+      },
+    ],
+  });
+
+export const encodeV3CollectCalldata = ({
+  tokenId,
+  recipient,
+}: {
+  readonly tokenId: bigint;
+  readonly recipient: `0x${string}`;
+}): `0x${string}` =>
+  encodeFunctionData({
+    abi: withdrawAbi,
+    functionName: 'collect',
+    args: [
+      {
+        tokenId,
+        recipient,
+        amount0Max: (1n << 128n) - 1n,
+        amount1Max: (1n << 128n) - 1n,
+      },
+    ],
+  });
+
+export interface EncodeV3SwapUsdtToUsdcInput {
+  readonly amountIn: bigint;
+  readonly amountOutMinimum: bigint;
+  readonly recipient: `0x${string}`;
+}
+
+export const encodeV3SwapUsdtToUsdcCalldata = ({
+  amountIn,
+  amountOutMinimum,
+  recipient,
+}: EncodeV3SwapUsdtToUsdcInput): `0x${string}` =>
+  encodeFunctionData({
+    abi: swapRouterAbi,
+    functionName: 'exactInputSingle',
+    args: [
+      {
+        tokenIn: USDT,
+        tokenOut: USDC,
         fee: POOL_FEE,
         recipient,
         amountIn,

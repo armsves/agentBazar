@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { listAllAgents } from "@/lib/agents/registry/merge";
 import { agentEnsName, type AgentEnsConfig } from "@/lib/ens/agent-records";
 import { listUserGrants } from "@/lib/agents/grants/storage";
+import { getAgentReputations } from "@/lib/agents/reputation/storage";
 import {
   type AuthenticatedUser,
   withAuth,
@@ -15,6 +16,7 @@ export const GET = withAuth(
     const agents = await listAllAgents({ discoverEns: true });
     const grants = await listUserGrants(user.sub);
     const installedIds = new Set(grants.map((g) => g.agentId));
+    const reputations = await getAgentReputations(agents.map((agent) => agent.id));
 
     const ensParent = process.env.ENS_AGENT_PARENT?.trim();
     const ensConfig: AgentEnsConfig | null = ensParent
@@ -34,6 +36,7 @@ export const GET = withAuth(
         ensName: agent.ensName ?? (ensConfig ? agentEnsName(agent, ensConfig.parentName) : null),
         installed: installedIds.has(agent.id),
         grant: grants.find((g) => g.agentId === agent.id) ?? null,
+        reputation: reputations[agent.id] ?? null,
       })),
     });
   },

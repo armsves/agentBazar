@@ -11,6 +11,8 @@
     "ens:register": "tsx scripts/register-ens-sepolia.ts",
     "ens:publish": "tsx scripts/ens-publish-agents-sepolia.ts",
     "ens:publish:lifidynamicens": "ENS_PUBLISH_AGENT_ID=lifidynamicens-lp tsx scripts/ens-publish-agents-sepolia.ts",
+    "ens:publish:single": "tsx scripts/ens-publish-agents-sepolia.ts",
+    "agent:register:composer": "tsx scripts/register-composer-agents.ts",
     "agent:register": "tsx scripts/agent-self-register.ts",
     "agent:join": "tsx scripts/join-agent-bazar.ts",
     "test:marketplace": "bash scripts/test-marketplace.sh"

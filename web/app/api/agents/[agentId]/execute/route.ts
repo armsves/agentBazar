@@ -26,6 +26,17 @@ export const POST = withAuth<AgentParams>(
       );
     }
 
+    if (agent.kind === "advisor") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Advisor agents provide recommendations via /api/chat — no on-chain execution.",
+        },
+        { status: 400 },
+      );
+    }
+
     const body = await req.json();
     const parsed = ExecuteAgentSchema.safeParse(body);
 
@@ -40,7 +51,23 @@ export const POST = withAuth<AgentParams>(
       );
     }
 
-    const { address, chain, usdcAmount, usdtAmount, dryRun } = parsed.data;
+    const {
+      address,
+      chain,
+      action,
+      usdcAmount,
+      usdtAmount,
+      tokenId,
+      liquidity,
+      dryRun,
+    } = parsed.data;
+
+    if (action === "withdraw" && !tokenId) {
+      return NextResponse.json(
+        { success: false, error: "tokenId is required for withdraw" },
+        { status: 400 },
+      );
+    }
 
     if (!userOwnsAddress(user, address)) {
       return NextResponse.json(
@@ -53,15 +80,47 @@ export const POST = withAuth<AgentParams>(
       const result = await executeAgentAction({
         userId: user.sub,
         agentId,
-        input: { address, chain, usdcAmount, usdtAmount, dryRun },
+        input: {
+          address,
+          chain,
+          action,
+          usdcAmount,
+          usdtAmount,
+          tokenId,
+          liquidity,
+          dryRun,
+        },
       });
 
-      if (result.dryRun) {
+      if (result.dryRun && result.action === "withdraw") {
         const { preview } = result;
         const { compile } = preview;
         return NextResponse.json({
           success: true,
           dryRun: true,
+          action: "withdraw",
+          agentId,
+          version: agent.version,
+          tokenId: preview.tokenId,
+          liquidity: preview.liquidity,
+          userProxy: compile.userProxy ?? preview.userProxy,
+          approvalsRequired: compile.approvals?.length ?? 0,
+          guardrails: result.grant,
+          transaction: {
+            to: compile.transactionRequest.to,
+            value: compile.transactionRequest.value,
+            gasLimit: compile.transactionRequest.gasLimit,
+          },
+        });
+      }
+
+      if (result.dryRun && result.action === "deposit") {
+        const { preview } = result;
+        const { compile } = preview;
+        return NextResponse.json({
+          success: true,
+          dryRun: true,
+          action: "deposit",
           agentId,
           version: agent.version,
           ...depositMetadata,
@@ -80,18 +139,26 @@ export const POST = withAuth<AgentParams>(
         });
       }
 
-      const { result: executed } = result;
-      return NextResponse.json({
-        success: true,
-        dryRun: false,
-        agentId,
-        version: agent.version,
-        userProxy: executed.userProxy,
-        approvalHashes: executed.approvalHashes,
-        composeHash: executed.composeHash,
-        liquidity: executed.liquidity,
-        explorerUrl: `https://optimistic.etherscan.io/tx/${executed.composeHash}`,
-      });
+      if (!result.dryRun) {
+        const { result: executed } = result;
+        return NextResponse.json({
+          success: true,
+          dryRun: false,
+          action: result.action,
+          agentId,
+          version: agent.version,
+          userProxy: executed.userProxy,
+          approvalHashes: executed.approvalHashes,
+          composeHash: executed.composeHash,
+          liquidity: executed.liquidity,
+          explorerUrl: `https://optimistic.etherscan.io/tx/${executed.composeHash}`,
+        });
+      }
+
+      return NextResponse.json(
+        { success: false, error: "Unexpected dry-run result" },
+        { status: 500 },
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Execution failed";
       return NextResponse.json({ success: false, error: message }, { status: 500 });

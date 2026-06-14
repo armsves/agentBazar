@@ -29,6 +29,7 @@ const SQRT_RATIO_MAX =
 
 const ACTIONS_MINT_POSITION = 0x02;
 const ACTIONS_SETTLE_PAIR = 0x0d;
+const ACTIONS_BURN_POSITION = 0x03;
 
 const mulDiv = (a: bigint, b: bigint, denominator: bigint): bigint =>
   (a * b) / denominator;
@@ -203,6 +204,38 @@ export const encodeV4ModifyLiquiditiesCalldata = ({
   const unlockData = encodeAbiParameters(
     parseAbiParameters('bytes actions, bytes[] params'),
     [actions, [mintParams, settleParams]],
+  );
+
+  return encodeFunctionData({
+    abi: positionManagerAbi,
+    functionName: 'modifyLiquidities',
+    args: [unlockData, deadline],
+  });
+};
+
+export const encodeV4BurnPositionCalldata = ({
+  tokenId,
+  amount0Min,
+  amount1Min,
+  deadline,
+}: {
+  readonly tokenId: bigint;
+  readonly amount0Min: bigint;
+  readonly amount1Min: bigint;
+  readonly deadline: bigint;
+}): `0x${string}` => {
+  const actions = encodePacked(['uint8'], [ACTIONS_BURN_POSITION]);
+
+  const burnParams = encodeAbiParameters(
+    parseAbiParameters(
+      'uint256 tokenId, uint128 amount0Min, uint128 amount1Min, bytes hookData',
+    ),
+    [tokenId, amount0Min, amount1Min, '0x'],
+  );
+
+  const unlockData = encodeAbiParameters(
+    parseAbiParameters('bytes actions, bytes[] params'),
+    [actions, [burnParams]],
   );
 
   return encodeFunctionData({

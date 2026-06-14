@@ -2,11 +2,13 @@ import { tool } from "ai";
 import { z } from "zod";
 
 import { executeAgentAction } from "@/lib/agents/execute";
+import { createEarnPortfolioTools } from "@/lib/agents/orchestrator/earn-tools";
 import { getGrant, installGrant, listUserGrants } from "@/lib/agents/grants/storage";
 import { discoverAgentsFromEns } from "@/lib/agents/registry/discover-ens";
 import { getAgentByIdMerged, listAllAgents } from "@/lib/agents/registry/merge";
 import { getDelegationByAddress } from "@/lib/dynamic/delegation/storage";
 import { normalizeChain } from "@/lib/dynamic/delegation/chain";
+import type { Agent } from "@/lib/agents/types";
 
 export type OrchestratorContext = {
   userId: string;
@@ -18,9 +20,18 @@ function toAtomicUsdc(humanAmount: number): string {
   return String(Math.round(humanAmount * 1_000_000));
 }
 
-export function createOrchestratorTools(context: OrchestratorContext) {
+export function createOrchestratorTools(
+  context: OrchestratorContext,
+  focusAgent?: Agent,
+) {
   const chain = normalizeChain(context.chain);
   const address = context.walletAddress.toLowerCase();
+  const earnTools = createEarnPortfolioTools();
+  const includeEarnTools =
+    !focusAgent ||
+    focusAgent.kind === "advisor" ||
+    focusAgent.capabilities.includes("earn-portfolio") ||
+    focusAgent.id === "agent-bazar-concierge";
 
   return {
     list_marketplace_agents: tool({
@@ -186,6 +197,7 @@ export function createOrchestratorTools(context: OrchestratorContext) {
           input: {
             address,
             chain,
+            action: "deposit",
             usdcAmount: atomicHalf,
             usdtAmount: atomicHalf,
             dryRun: true,
@@ -194,6 +206,10 @@ export function createOrchestratorTools(context: OrchestratorContext) {
 
         if (!result.dryRun) {
           return { success: false, error: "Expected dry-run result" };
+        }
+
+        if (result.action !== "deposit") {
+          return { success: false, error: "Expected deposit dry-run result" };
         }
 
         return {
@@ -242,6 +258,7 @@ export function createOrchestratorTools(context: OrchestratorContext) {
           input: {
             address,
             chain,
+            action: "deposit",
             usdcAmount: atomicHalf,
             usdtAmount: atomicHalf,
             dryRun: false,
@@ -254,6 +271,7 @@ export function createOrchestratorTools(context: OrchestratorContext) {
 
         return {
           success: true,
+          action: "deposit",
           composeHash: result.result.composeHash,
           explorerUrl: `https://optimistic.etherscan.io/tx/${result.result.composeHash}`,
           approvalCount: result.result.approvalHashes.length,
@@ -261,5 +279,93 @@ export function createOrchestratorTools(context: OrchestratorContext) {
         };
       },
     }),
+
+    simulate_withdraw: tool({
+      description:
+        "Dry-run withdrawing LP from a Composer manager agent (composer-v3-lp or composer-v4-lp). Requires the position NFT tokenId.",
+      inputSchema: z.object({
+        agentId: z.enum(["composer-v3-lp", "composer-v4-lp"]),
+        tokenId: z.string().regex(/^\d+$/).describe("Uniswap LP position NFT token id"),
+      }),
+      execute: async ({ agentId, tokenId }) => {
+        const result = await executeAgentAction({
+          userId: context.userId,
+          agentId,
+          input: {
+            address,
+            chain,
+            action: "withdraw",
+            tokenId,
+            dryRun: true,
+          },
+        });
+
+        if (!result.dryRun || result.action !== "withdraw") {
+          return { success: false, error: "Expected withdraw dry-run result" };
+        }
+
+        return {
+          success: true,
+          agentId,
+          tokenId: result.preview.tokenId,
+          liquidity: result.preview.liquidity,
+          userProxy: result.preview.userProxy,
+          approvalsRequired: result.preview.compile.approvals?.length ?? 0,
+        };
+      },
+    }),
+
+    execute_withdraw: tool({
+      description:
+        "Execute a real on-chain LP withdraw via Composer. ONLY after simulate_withdraw AND user confirmed.",
+      inputSchema: z.object({
+        agentId: z.enum(["composer-v3-lp", "composer-v4-lp"]),
+        tokenId: z.string().regex(/^\d+$/),
+        userConfirmed: z.boolean(),
+      }),
+      execute: async ({ agentId, tokenId, userConfirmed }) => {
+        if (!userConfirmed) {
+          return {
+            success: false,
+            error: "User must explicitly confirm withdraw before this tool runs.",
+          };
+        }
+
+        const grant = await getGrant(context.userId, agentId);
+        if (!grant) {
+          return {
+            success: false,
+            error: `Agent ${agentId} not installed. Install it first.`,
+          };
+        }
+
+        const result = await executeAgentAction({
+          userId: context.userId,
+          agentId,
+          input: {
+            address,
+            chain,
+            action: "withdraw",
+            tokenId,
+            dryRun: false,
+          },
+        });
+
+        if (result.dryRun) {
+          return { success: false, error: "Expected execution result" };
+        }
+
+        return {
+          success: true,
+          action: "withdraw",
+          composeHash: result.result.composeHash,
+          explorerUrl: `https://optimistic.etherscan.io/tx/${result.result.composeHash}`,
+          approvalCount: result.result.approvalHashes.length,
+          userProxy: result.result.userProxy,
+        };
+      },
+    }),
+
+    ...(includeEarnTools ? earnTools : {}),
   };
 }

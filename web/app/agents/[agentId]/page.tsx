@@ -5,11 +5,15 @@ import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useParams } from "next/navigation";
 
+import { AgentRobotAvatar, AgentRobotHero } from "@/components/marketplace/agent-robot-avatar";
 import { AgentGrantForm } from "@/components/marketplace/agent-grant-form";
+import { AgentChat } from "@/components/marketplace/agent-chat";
+import { AgentReputationStars } from "@/components/marketplace/agent-reputation-stars";
 import { ExecutionPanel } from "@/components/marketplace/execution-panel";
-import { OrchestratorChat } from "@/components/marketplace/orchestrator-chat";
 import { Button } from "@/components/ui/button";
 import type { Agent, UserAgentGrant } from "@/lib/agents/types";
+import type { AgentReputation } from "@/lib/agents/reputation/types";
+import { getAgentListing } from "@/lib/agents/listings";
 import { useDynamicContext } from "@/lib/dynamic";
 import { authFetch } from "@/lib/dynamic/auth-fetch";
 
@@ -20,6 +24,7 @@ export default function AgentDetailPage() {
 
   const [agent, setAgent] = useState<Agent | null>(null);
   const [grant, setGrant] = useState<UserAgentGrant | null>(null);
+  const [reputation, setReputation] = useState<AgentReputation | null>(null);
   const [installed, setInstalled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +47,7 @@ export default function AgentDetailPage() {
           setAgent(found);
           setInstalled(false);
           setGrant(null);
+          setReputation(found.reputation ?? null);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load agent");
@@ -63,6 +69,7 @@ export default function AgentDetailPage() {
       setAgent(data.agent);
       setGrant(data.grant);
       setInstalled(data.installed);
+      setReputation(data.reputation ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agent");
       setAgent(null);
@@ -100,17 +107,31 @@ export default function AgentDetailPage() {
     );
   }
 
+  const listing = getAgentListing(agent);
+
   return (
     <div className="flex w-full max-w-2xl flex-col gap-6 pt-16">
       <Button variant="ghost" size="sm" className="w-fit" asChild>
         <Link href="/agents">
           <ArrowLeft className="mr-2 size-4" />
-          Marketplace
+          Talent pool
         </Link>
       </Button>
 
+      <AgentRobotHero agentId={agent.id} />
+
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{agent.name}</h1>
+        <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          {listing.tagline}
+        </p>
+        <div className="flex items-center gap-3">
+          <AgentRobotAvatar agentId={agent.id} size="lg" />
+          <div>
+            <h1 className="text-2xl font-semibold">{agent.name}</h1>
+            <AgentReputationStars reputation={reputation} size="md" />
+          </div>
+        </div>
+        <p className="text-sm italic">&ldquo;{listing.pitch}&rdquo;</p>
         <p className="text-muted-foreground text-sm">{agent.longDescription}</p>
         <div className="flex flex-wrap gap-1">
           {agent.tags.map((tag) => (
@@ -135,10 +156,21 @@ export default function AgentDetailPage() {
         }}
       />
 
-      {agent.kind === "orchestrator" ? (
-        <OrchestratorChat />
-      ) : (
-        <ExecutionPanel agent={agent} installed={installed} />
+      <AgentChat
+        agentId={agent.id}
+        agentName={agent.name}
+        listing={listing}
+      />
+
+      {agent.kind === "specialist" && (
+        <details className="text-sm">
+          <summary className="text-muted-foreground cursor-pointer">
+            Manual controls (advanced)
+          </summary>
+          <div className="mt-3">
+            <ExecutionPanel agent={agent} installed={installed} />
+          </div>
+        </details>
       )}
 
       {grant && (

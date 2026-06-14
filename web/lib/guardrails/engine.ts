@@ -137,7 +137,16 @@ export function assertGuardrails(
   usdcAmount: bigint,
   compiled: ComposeCompileSuccessData & { status: "success" },
   owner: string,
+  action: "deposit" | "withdraw" = "deposit",
 ): void {
+  if (action === "withdraw") {
+    const contractViolation = validateCompiledContracts(compiled, version, owner);
+    if (contractViolation) {
+      throw new Error(`Guardrail: ${contractViolation.message}`);
+    }
+    return;
+  }
+
   const spendViolation = validateGrantSpend(grant, version, usdcAmount);
   if (spendViolation) {
     throw new Error(`Guardrail: ${spendViolation.message}`);

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { createMarketplaceOrchestrator } from "@/lib/agents/orchestrator/agent";
 import { hasLlmConfigured } from "@/lib/agents/orchestrator/model";
+import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import {
   type AuthenticatedUser,
   userOwnsAddress,
@@ -15,6 +16,7 @@ const ChatBodySchema = z.object({
   messages: z.array(z.custom<UIMessage>()),
   walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   chain: z.string().default("EVM"),
+  agentId: z.string().min(2).optional(),
 });
 
 /**
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const { messages, walletAddress, chain } = parsed.data;
+  const { messages, walletAddress, chain, agentId } = parsed.data;
 
   if (walletAddress && !userOwnsAddress(user, walletAddress)) {
     return NextResponse.json(
@@ -75,11 +77,25 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const orchestrator = await createMarketplaceOrchestrator({
-    userId: user.sub,
-    walletAddress: address,
-    chain,
-  });
+  const focusAgent = agentId
+    ? await getAgentByIdMerged(agentId, { discoverEns: true })
+    : undefined;
+
+  if (agentId && !focusAgent) {
+    return NextResponse.json(
+      { error: `Unknown agent: ${agentId}` },
+      { status: 404 },
+    );
+  }
+
+  const orchestrator = await createMarketplaceOrchestrator(
+    {
+      userId: user.sub,
+      walletAddress: address,
+      chain,
+    },
+    focusAgent,
+  );
 
   return createAgentUIStreamResponse({
     agent: orchestrator,

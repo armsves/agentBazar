@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getGrant } from "@/lib/agents/grants/storage";
+import { getAgentReputation } from "@/lib/agents/reputation/storage";
 import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import { withAuth } from "@/lib/dynamic/dynamic-auth";
 
@@ -21,12 +22,14 @@ export const GET = withAuth<AgentParams>(
     }
 
     const grant = await getGrant(user.sub, agentId);
+    const reputation = await getAgentReputation(agentId);
 
     return NextResponse.json({
       success: true,
       agent,
       grant: grant ?? null,
       installed: Boolean(grant),
+      reputation,
     });
   },
 );

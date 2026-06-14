@@ -2,11 +2,13 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { listAllAgents } from "@/lib/agents/registry/merge";
+import { getAgentReputations } from "@/lib/agents/reputation/storage";
 import { agentEnsName, type AgentEnsConfig } from "@/lib/ens/agent-records";
 
 /** GET /api/agents/catalog — public marketplace catalog (no auth) */
 export async function GET(_req: NextRequest) {
   const agents = await listAllAgents({ discoverEns: true });
+  const reputations = await getAgentReputations(agents.map((agent) => agent.id));
 
   const ensParent = process.env.ENS_AGENT_PARENT?.trim();
   const ensConfig: AgentEnsConfig | null = ensParent
@@ -28,6 +30,7 @@ export async function GET(_req: NextRequest) {
         (ensConfig ? agentEnsName(agent, ensConfig.parentName) : null),
       installed: false,
       grant: null,
+      reputation: reputations[agent.id] ?? null,
     })),
   });
 }

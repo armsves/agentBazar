@@ -30,6 +30,7 @@ export interface MintUniswapV4Input {
   readonly usdtAmount: `${bigint}`;
   readonly slippageBps?: number;
   readonly userProxy?: Address;
+  readonly lpRecipient?: Address;
 }
 
 const bpsMin = (amount: `${bigint}`, bps: number): bigint => {
@@ -68,6 +69,7 @@ const resolveUserProxy = async (
     slippageBps,
     liquidity,
     swapRecipient: owner,
+    lpRecipient: owner,
     simulationPolicy: 'allow-revert',
   });
 
@@ -82,10 +84,12 @@ const buildMintFlow = ({
   slippageBps = 100,
   liquidity,
   swapRecipient,
+  lpRecipient,
   simulationPolicy,
 }: MintUniswapV4Input & {
   readonly liquidity: bigint;
   readonly swapRecipient: Address;
+  readonly lpRecipient: Address;
   readonly simulationPolicy?: 'allow-revert';
 }): {
   flow: Flow;
@@ -177,7 +181,7 @@ const buildMintFlow = ({
     liquidity,
     amount0Max,
     amount1Max,
-    owner,
+    owner: lpRecipient,
     deadline: BigInt(permitExpiry),
   });
 
@@ -221,6 +225,7 @@ export const buildMintUniswapV4 = async ({
   usdtAmount,
   slippageBps = 100,
   userProxy: userProxyInput,
+  lpRecipient: lpRecipientInput,
 }: MintUniswapV4Input): Promise<{
   flow: Flow;
   request: ComposeCompileRequest;
@@ -242,6 +247,7 @@ export const buildMintUniswapV4 = async ({
       slippageBps,
       liquidity,
     ));
+  const lpRecipient = lpRecipientInput ?? owner;
 
   const built = buildMintFlow({
     owner,
@@ -250,6 +256,7 @@ export const buildMintUniswapV4 = async ({
     slippageBps,
     liquidity,
     swapRecipient: userProxy,
+    lpRecipient,
   });
 
   return { ...built, liquidity, userProxy };

@@ -1,7 +1,11 @@
 import { z } from "zod";
 
-const AgentCapabilitySchema = z.enum(["uniswap-v3-lp", "uniswap-v4-lp"]);
-const AgentKindSchema = z.enum(["orchestrator", "specialist"]);
+const AgentCapabilitySchema = z.enum([
+  "uniswap-v3-lp",
+  "uniswap-v4-lp",
+  "earn-portfolio",
+]);
+const AgentKindSchema = z.enum(["orchestrator", "specialist", "advisor"]);
 const UniswapVersionSchema = z.enum(["v3", "v4"]);
 
 export const AgentManifestSchema = z.object({
@@ -52,10 +56,18 @@ export const InstallGrantSchema = z.object({
   maxUsdcDaily: z.string().regex(/^\d+$/).optional(),
 });
 
+export const SubmitRatingSchema = z.object({
+  stars: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(500).optional(),
+});
+
 export const ExecuteAgentSchema = z.object({
   address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   chain: z.string().min(1).default("EVM"),
+  action: z.enum(["deposit", "withdraw"]).default("deposit"),
   usdcAmount: z.string().regex(/^\d+$/).optional(),
   usdtAmount: z.string().regex(/^\d+$/).optional(),
+  tokenId: z.string().regex(/^\d+$/).optional(),
+  liquidity: z.string().regex(/^\d+$/).optional(),
   dryRun: z.boolean().optional(),
 });

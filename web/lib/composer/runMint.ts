@@ -9,6 +9,8 @@ import { signAndBroadcastTransaction } from "@/lib/dynamic/delegation/signTransa
 import type { DelegationRecord } from "@/lib/dynamic/delegation/types";
 import { buildMintUniswapV3 } from "../../../src/mintUniswapV3";
 import { buildMintUniswapV4 } from "../../../src/mintUniswapV4";
+import { buildWithdrawUniswapV3 } from "../../../src/withdrawUniswapV3";
+import { buildWithdrawUniswapV4 } from "../../../src/withdrawUniswapV4";
 import {
   OPTIMISM_CHAIN_ID,
   POOL_FEE,
@@ -21,6 +23,23 @@ export interface DepositInput {
   readonly version: "v3" | "v4";
   readonly usdcAmount?: string;
   readonly usdtAmount?: string;
+  /** Mint LP NFT to LiFi user proxy so Composer can withdraw later. */
+  readonly mintNftToProxy?: boolean;
+}
+
+export interface WithdrawInput {
+  readonly owner: Address;
+  readonly version: "v3" | "v4";
+  readonly tokenId: string;
+  readonly liquidity?: string;
+}
+
+export interface BuildWithdrawResult {
+  readonly version: "v3" | "v4";
+  readonly tokenId: string;
+  readonly liquidity?: string;
+  readonly userProxy?: string;
+  readonly compile: CompiledDeposit;
 }
 
 export interface BuildDepositResult {
@@ -86,6 +105,16 @@ export async function buildAndCompileDeposit(
           });
           liquidity = result.liquidity;
           previewUserProxy = result.userProxy;
+          if (input.mintNftToProxy) {
+            const withProxy = await buildMintUniswapV4({
+              owner: input.owner,
+              usdcAmount: usdcAmount as `${bigint}`,
+              usdtAmount: usdtAmount as `${bigint}`,
+              userProxy: result.userProxy,
+              lpRecipient: result.userProxy,
+            });
+            return withProxy;
+          }
           return result;
         })()
       : await (async () => {
@@ -95,6 +124,16 @@ export async function buildAndCompileDeposit(
             usdtAmount: usdtAmount as `${bigint}`,
           });
           previewUserProxy = result.userProxy;
+          if (input.mintNftToProxy) {
+            const withProxy = await buildMintUniswapV3({
+              owner: input.owner,
+              usdcAmount: usdcAmount as `${bigint}`,
+              usdtAmount: usdtAmount as `${bigint}`,
+              userProxy: result.userProxy,
+              lpRecipient: result.userProxy,
+            });
+            return withProxy;
+          }
           return result;
         })();
 
@@ -115,6 +154,46 @@ export async function buildAndCompileDeposit(
     totalUsdcDeposit: (BigInt(usdcAmount) + BigInt(usdtAmount)).toString(),
     liquidity: liquidity?.toString(),
     userProxy: result.userProxy ?? previewUserProxy,
+    compile: result,
+  };
+}
+
+export async function buildAndCompileWithdraw(
+  input: WithdrawInput,
+): Promise<BuildWithdrawResult> {
+  configureComposerEnv();
+
+  const baseUrl = env.COMPOSER_BASE_URL ?? "https://composer.li.quest";
+  const sdk = createComposeSdk({ baseUrl, apiKey: env.LIFI_API_KEY });
+
+  const built =
+    input.version === "v4"
+      ? await buildWithdrawUniswapV4({
+          owner: input.owner,
+          tokenId: input.tokenId as `${bigint}`,
+        })
+      : await buildWithdrawUniswapV3({
+          owner: input.owner,
+          tokenId: input.tokenId as `${bigint}`,
+          liquidity: input.liquidity as `${bigint}` | undefined,
+        });
+
+  const result = await sdk.client.compile(built.request);
+
+  if (result.status !== "success") {
+    const message = result.error.message;
+    const revert = result.simulationRevert
+      ? ` — ${result.simulationRevert}`
+      : "";
+    throw new Error(`Compile failed: ${message}${revert}`);
+  }
+
+  return {
+    version: input.version,
+    tokenId: input.tokenId,
+    liquidity:
+      "liquidity" in built ? built.liquidity?.toString() : undefined,
+    userProxy: result.userProxy,
     compile: result,
   };
 }

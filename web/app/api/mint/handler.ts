@@ -54,13 +54,14 @@ export async function handleMintRequest(
       input: {
         address,
         chain,
+        action: "deposit",
         usdcAmount,
         usdtAmount,
         dryRun: dryRun ?? false,
       },
     });
 
-    if (result.dryRun) {
+    if (result.dryRun && result.action === "deposit") {
       const { preview } = result;
       const { compile } = preview;
       return NextResponse.json(
@@ -87,20 +88,27 @@ export async function handleMintRequest(
       );
     }
 
-    const { result: executed } = result;
+    if (!result.dryRun) {
+      const { result: executed } = result;
+      return NextResponse.json(
+        {
+          success: true,
+          dryRun: false,
+          version,
+          agentId,
+          userProxy: executed.userProxy,
+          approvalHashes: executed.approvalHashes,
+          composeHash: executed.composeHash,
+          liquidity: executed.liquidity,
+          explorerUrl: `https://optimistic.etherscan.io/tx/${executed.composeHash}`,
+        },
+        { status: 200 },
+      );
+    }
+
     return NextResponse.json(
-      {
-        success: true,
-        dryRun: false,
-        version,
-        agentId,
-        userProxy: executed.userProxy,
-        approvalHashes: executed.approvalHashes,
-        composeHash: executed.composeHash,
-        liquidity: executed.liquidity,
-        explorerUrl: `https://optimistic.etherscan.io/tx/${executed.composeHash}`,
-      },
-      { status: 200 },
+      { success: false, error: "Unexpected execute result" },
+      { status: 500 },
     );
   } catch (error) {
     const errorMessage =

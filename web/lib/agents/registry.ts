@@ -42,6 +42,45 @@ export const AGENT_REGISTRY: Agent[] = [
     tags: ["defi", "uniswap", "liquidity", "optimism", "v4"],
   },
   {
+    id: "composer-v3-lp",
+    name: "Composer Uniswap V3 LP Manager",
+    description:
+      "Deposit and withdraw USDC/USDT liquidity on Uniswap v3 via LiFi Composer on Optimism.",
+    longDescription:
+      "Full-cycle v3 LP agent: deposits USDC (swap leg + USDT leg), mints a full-range position NFT on the LiFi user proxy, and withdraws via decreaseLiquidity + collect Composer flows. All txs signed via Dynamic delegated MPC with spend guardrails.",
+    capabilities: ["uniswap-v3-lp"],
+    version: "v3",
+    kind: "specialist",
+    chainId: OPTIMISM_CHAIN_ID,
+    tags: ["composer", "uniswap", "v3", "deposit", "withdraw"],
+  },
+  {
+    id: "composer-v4-lp",
+    name: "Composer Uniswap V4 LP Manager",
+    description:
+      "Deposit and withdraw USDC/USDT liquidity on Uniswap v4 via LiFi Composer and Permit2.",
+    longDescription:
+      "Full-cycle v4 LP agent: deposits via modifyLiquidities mint, withdraws by burning the position NFT through Composer. Uses Permit2 approvals and Dynamic delegated signing with marketplace guardrails.",
+    capabilities: ["uniswap-v4-lp"],
+    version: "v4",
+    kind: "specialist",
+    chainId: OPTIMISM_CHAIN_ID,
+    tags: ["composer", "uniswap", "v4", "deposit", "withdraw"],
+  },
+  {
+    id: "lifi-earn-balancer",
+    name: "LiFi Earn Portfolio Balancer",
+    description:
+      "Suggests how to balance USDC across top LiFi Earn vaults on Optimism by risk profile.",
+    longDescription:
+      "Advisor agent powered by the LiFi Earn API. Fetches live vault APY/TVL on Optimism, filters flagged outliers for conservative profiles, and proposes percentage allocations across Yearn, Morpho, and other earn vaults. Recommend-only — use Composer LP agents or LiFi Earn to execute deposits.",
+    kind: "advisor",
+    capabilities: ["earn-portfolio"],
+    version: "v3",
+    chainId: OPTIMISM_CHAIN_ID,
+    tags: ["lifi", "earn", "portfolio", "advisor", "optimism"],
+  },
+  {
     id: "lifidynamicens-lp",
     name: "LiFi Dynamic ENS LP",
     description:
