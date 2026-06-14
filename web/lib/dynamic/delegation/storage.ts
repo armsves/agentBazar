@@ -1,4 +1,5 @@
 import type { DelegationRecord } from "@/lib/dynamic/delegation/types";
+import { normalizeChain } from "@/lib/dynamic/delegation/chain";
 import { getRedisClient } from "../../redis";
 
 /**
@@ -18,6 +19,25 @@ function getAddressDelegationsKey(address: string): string {
 
 function getAddressChainDelegationKey(address: string, chain: string): string {
   return `delegation:address:${address.toLowerCase()}:${chain}`;
+}
+
+/** Upstash/Vercel KV may return JSON objects directly, not strings. */
+function parseDelegationRecord(data: unknown): DelegationRecord | undefined {
+  if (!data) return undefined;
+
+  if (typeof data === "object") {
+    return data as DelegationRecord;
+  }
+
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data) as DelegationRecord;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -71,24 +91,31 @@ function getAddressChainDelegationKey(address: string, chain: string): string {
  * Store a delegation record for a user on a specific chain
  */
 export async function storeDelegation(record: DelegationRecord): Promise<void> {
+  const chain = normalizeChain(record.chain);
+  const normalizedRecord: DelegationRecord = {
+    ...record,
+    chain,
+    address: record.address,
+  };
+
   const redis = getRedisClient();
-  const delegationKey = getDelegationKey(record.userId, record.chain);
-  const userDelegationsKey = getUserDelegationsKey(record.userId);
-  const addressDelegationsKey = getAddressDelegationsKey(record.address);
+  const delegationKey = getDelegationKey(normalizedRecord.userId, chain);
+  const userDelegationsKey = getUserDelegationsKey(normalizedRecord.userId);
+  const addressDelegationsKey = getAddressDelegationsKey(normalizedRecord.address);
   const addressChainDelegationKey = getAddressChainDelegationKey(
-    record.address,
-    record.chain
+    normalizedRecord.address,
+    chain,
   );
 
-  const recordJson = JSON.stringify(record);
+  const recordJson = JSON.stringify(normalizedRecord);
 
   await redis.set(delegationKey, recordJson);
   await redis.set(addressChainDelegationKey, recordJson);
-  await redis.sadd(userDelegationsKey, record.chain);
-  await redis.sadd(addressDelegationsKey, record.chain);
+  await redis.sadd(userDelegationsKey, chain);
+  await redis.sadd(addressDelegationsKey, chain);
 
   console.log(
-    `✅ Stored delegation for user ${record.userId} on ${record.chain}`
+    `✅ Stored delegation for user ${normalizedRecord.userId} on ${chain} at ${normalizedRecord.address}`,
   );
 }
 
@@ -97,23 +124,21 @@ export async function storeDelegation(record: DelegationRecord): Promise<void> {
  */
 export async function getDelegation(
   userId: string,
-  chain: string
+  chain: string,
 ): Promise<DelegationRecord | undefined> {
   const redis = getRedisClient();
-  const delegationKey = getDelegationKey(userId, chain);
+  const delegationKey = getDelegationKey(userId, normalizeChain(chain));
 
   const data = await redis.get(delegationKey);
-  if (!data) return undefined;
-
-  try {
-    return JSON.parse(data as string) as DelegationRecord;
-  } catch (error) {
-    console.error(
-      `Failed to parse delegation record for ${delegationKey}:`,
-      error
-    );
+  const record = parseDelegationRecord(data);
+  if (!record) {
+    if (data) {
+      console.error(`Failed to parse delegation record for ${delegationKey}`);
+    }
     return undefined;
   }
+
+  return record;
 }
 
 /**
@@ -121,26 +146,29 @@ export async function getDelegation(
  */
 export async function getDelegationByAddress(
   address: string,
-  chain: string
+  chain: string,
 ): Promise<DelegationRecord | undefined> {
   const redis = getRedisClient();
-  const addressChainDelegationKey = getAddressChainDelegationKey(
-    address,
-    chain
-  );
+  const normalized = normalizeChain(chain);
+  const variants = [...new Set([normalized, chain, chain.toLowerCase(), chain.toUpperCase()])];
 
-  const data = await redis.get(addressChainDelegationKey);
-  if (!data) return undefined;
-
-  try {
-    return JSON.parse(data as string) as DelegationRecord;
-  } catch (error) {
-    console.error(
-      `Failed to parse delegation record for ${addressChainDelegationKey}:`,
-      error
+  for (const variant of variants) {
+    const addressChainDelegationKey = getAddressChainDelegationKey(
+      address,
+      variant,
     );
-    return undefined;
+    const data = await redis.get(addressChainDelegationKey);
+    const record = parseDelegationRecord(data);
+    if (record) return record;
+
+    if (data) {
+      console.error(
+        `Failed to parse delegation record for ${addressChainDelegationKey}`,
+      );
+    }
   }
+
+  return undefined;
 }
 
 /**
@@ -210,31 +238,60 @@ export async function getAllDelegationsByAddress(
 }
 
 /**
+ * Delete a delegation record by wallet address and chain.
+ */
+export async function deleteDelegationByAddress(
+  address: string,
+  chain: string,
+): Promise<boolean> {
+  const normalizedChain = normalizeChain(chain);
+  const record = await getDelegationByAddress(address, chain);
+
+  if (record) {
+    await deleteDelegation(record.userId, record.chain);
+  }
+
+  const redis = getRedisClient();
+  const addressChainKey = getAddressChainDelegationKey(address, normalizedChain);
+  const addressSetKey = getAddressDelegationsKey(address);
+
+  await redis.del(addressChainKey);
+  await redis.srem(addressSetKey, normalizedChain);
+
+  const remainingChains = await redis.smembers(addressSetKey);
+  if (!remainingChains || remainingChains.length === 0) {
+    await redis.del(addressSetKey);
+  }
+
+  return !(await getDelegationByAddress(address, chain));
+}
+
+/**
  * Delete a delegation record
  */
 export async function deleteDelegation(
   userId: string,
-  chain: string
+  chain: string,
 ): Promise<boolean> {
+  const normalizedChain = normalizeChain(chain);
   const redis = getRedisClient();
-  const delegationKey = getDelegationKey(userId, chain);
+  const delegationKey = getDelegationKey(userId, normalizedChain);
   const userDelegationsKey = getUserDelegationsKey(userId);
 
-  // Get the record to also remove from address index
-  const record = await getDelegation(userId, chain);
+  const record = await getDelegation(userId, normalizedChain);
   const addressDelegationsKey = record
     ? getAddressDelegationsKey(record.address)
     : null;
   const addressChainDelegationKey = record
-    ? getAddressChainDelegationKey(record.address, chain)
+    ? getAddressChainDelegationKey(record.address, normalizedChain)
     : null;
 
   const deleted = await redis.del(delegationKey);
-  await redis.srem(userDelegationsKey, chain);
+  await redis.srem(userDelegationsKey, normalizedChain);
 
   if (addressDelegationsKey && addressChainDelegationKey) {
     await redis.del(addressChainDelegationKey);
-    await redis.srem(addressDelegationsKey, chain);
+    await redis.srem(addressDelegationsKey, normalizedChain);
     const remainingAddressChains = await redis.smembers(addressDelegationsKey);
     if (!remainingAddressChains || remainingAddressChains.length === 0) {
       await redis.del(addressDelegationsKey);
