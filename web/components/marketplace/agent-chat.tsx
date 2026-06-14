@@ -212,6 +212,7 @@ export function AgentChat({
 }: AgentChatProps) {
   const { primaryWallet, user } = useDynamicContext();
   const [input, setInput] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
 
   const transport = useMemo(
     () =>
@@ -239,8 +240,18 @@ export function AgentChat({
   const isBusy = status === "streaming" || status === "submitted";
   const pendingBroadcast = detectPendingBroadcast(messages);
   const resolvedAgentId = agentId ?? "agent-bazar-concierge";
-  const hasAssistantReply = messages.some((message) => message.role === "assistant");
-  const showRating = Boolean(user && hasAssistantReply && !isBusy);
+  const hasConversation = messages.length > 0;
+  const isExpanded = inputFocused || hasConversation || isBusy;
+  const lastMessage = messages[messages.length - 1];
+  const chatDone =
+    Boolean(user) &&
+    messages.some((message) => message.role === "user") &&
+    messages.some((message) => message.role === "assistant") &&
+    lastMessage?.role === "assistant" &&
+    !isBusy &&
+    !inputFocused &&
+    !pendingBroadcast;
+  const showRating = chatDone;
 
   const displayName = agentName ?? (agentId ? agentId : "Agent Bazar Concierge");
   const tagline =
@@ -265,37 +276,55 @@ export function AgentChat({
         </p>
       ) : (
         <>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-            {messages.length === 0 && listing && (
-              <div className="bg-muted/60 mr-4 rounded-lg px-3 py-3 text-sm">
-                <p className="font-medium">{listing.opener}</p>
-                <p className="text-muted-foreground mt-2 text-xs">
-                  Try a starter below, or tell me what you want in plain English.
+          {(isExpanded || hasConversation) && (
+            <div
+              className={`min-h-0 space-y-3 overflow-y-auto pr-1 ${
+                isExpanded ? "flex-1" : "max-h-32"
+              }`}
+            >
+              {messages.length === 0 && listing && (
+                <div className="bg-muted/60 mr-4 rounded-lg px-3 py-2 text-sm">
+                  <p className="font-medium">{listing.opener}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Try a starter below, or tell me what you want in plain English.
+                  </p>
+                </div>
+              )}
+              {messages.length === 0 && !listing && isExpanded && (
+                <p className="text-muted-foreground text-xs">
+                  Ask who to hire, simulate LP deposits, or balance your earn
+                  portfolio…
                 </p>
-              </div>
-            )}
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`rounded-lg px-3 py-2 text-sm ${
-                  message.role === "user"
-                    ? "bg-primary/10 ml-8"
-                    : "bg-muted mr-8"
-                }`}
-              >
-                <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
-                  {message.role === "user" ? "You" : displayName}
-                </p>
-                <MessageParts parts={message.parts as ToolPart[]} />
-              </div>
-            ))}
-            {isBusy && (
-              <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Loader2 className="size-4 animate-spin" />
-                On it…
-              </div>
-            )}
-          </div>
+              )}
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`rounded-lg px-3 py-2 text-sm ${
+                    message.role === "user"
+                      ? "bg-primary/10 ml-8"
+                      : "bg-muted mr-8"
+                  }`}
+                >
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
+                    {message.role === "user" ? "You" : displayName}
+                  </p>
+                  <MessageParts parts={message.parts as ToolPart[]} />
+                </div>
+              ))}
+              {isBusy && (
+                <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <Loader2 className="size-4 animate-spin" />
+                  On it…
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isExpanded && !hasConversation && listing && (
+            <p className="text-muted-foreground shrink-0 text-xs italic">
+              {listing.opener}
+            </p>
+          )}
 
           {pendingBroadcast && !isBusy && (
             <div className="border-primary/30 bg-primary/5 flex shrink-0 flex-col gap-2 rounded-lg border p-3">
@@ -348,10 +377,12 @@ export function AgentChat({
             }}
           >
             <input
-              className="border-input bg-background min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+              className="border-input bg-background min-w-0 flex-1 rounded-md border px-3 py-2 text-sm transition-shadow focus:ring-2 focus:ring-primary/20"
               value={input}
               placeholder={`Instructions for ${displayName}…`}
               onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               disabled={isBusy}
             />
             <Button type="submit" size="icon" disabled={isBusy || !input.trim()}>
@@ -380,9 +411,13 @@ export function AgentChat({
 
   return (
     <Card
-      className={`flex h-[min(70vh,640px)] flex-col ${className ?? ""}`}
+      className={`flex flex-col transition-[height] duration-200 ease-out ${
+        isExpanded
+          ? "h-[min(70vh,640px)]"
+          : "h-auto max-h-none"
+      } ${className ?? ""}`}
     >
-      <CardHeader className="shrink-0">
+      <CardHeader className={`shrink-0 ${isExpanded ? "" : "pb-3"}`}>
         <CardTitle className="flex items-center gap-3">
           <AgentRobotAvatar
             agentId={resolvedAgentId}
@@ -395,7 +430,9 @@ export function AgentChat({
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+      <CardContent
+        className={`flex min-h-0 flex-col gap-3 ${isExpanded ? "flex-1" : ""}`}
+      >
         {content}
       </CardContent>
     </Card>
