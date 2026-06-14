@@ -37,7 +37,8 @@ export async function buildOrchestratorInstructions(): Promise<string> {
 
   lines.push(
     "",
-    "When a user asks what agents are available, call list_marketplace_agents first.",
+    "When a user asks what agents are available, call list_marketplace_agents or recommend_agent_for_goal.",
+    "When they ask for portfolio rebalance, earn vaults, or LP work, recommend the specialist and share hireUrl — do not answer as the specialist.",
   );
 
   return lines.join("\n");

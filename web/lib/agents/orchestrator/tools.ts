@@ -6,6 +6,7 @@ import { createEarnPortfolioTools } from "@/lib/agents/orchestrator/earn-tools";
 import { getGrant, installGrant, listUserGrants } from "@/lib/agents/grants/storage";
 import { discoverAgentsFromEns } from "@/lib/agents/registry/discover-ens";
 import { getAgentByIdMerged, listAllAgents } from "@/lib/agents/registry/merge";
+import { getAgentPersona } from "@/lib/agents/agent-prompts";
 import { getDelegationByAddress } from "@/lib/dynamic/delegation/storage";
 import { normalizeChain } from "@/lib/dynamic/delegation/chain";
 import type { Agent } from "@/lib/agents/types";
@@ -20,6 +21,17 @@ function toAtomicUsdc(humanAmount: number): string {
   return String(Math.round(humanAmount * 1_000_000));
 }
 
+function marketplaceBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    "https://agent-bazar-eight.vercel.app"
+  ).replace(/\/$/, "");
+}
+
+function agentHireUrl(agentId: string): string {
+  return `${marketplaceBaseUrl()}/agents/${agentId}`;
+}
+
 export function createOrchestratorTools(
   context: OrchestratorContext,
   focusAgent?: Agent,
@@ -27,11 +39,13 @@ export function createOrchestratorTools(
   const chain = normalizeChain(context.chain);
   const address = context.walletAddress.toLowerCase();
   const earnTools = createEarnPortfolioTools();
+  const isConcierge =
+    !focusAgent || focusAgent.id === "agent-bazar-concierge";
   const includeEarnTools =
-    !focusAgent ||
-    focusAgent.kind === "advisor" ||
-    focusAgent.capabilities.includes("earn-portfolio") ||
-    focusAgent.id === "agent-bazar-concierge";
+    Boolean(focusAgent) &&
+    !isConcierge &&
+    (focusAgent!.kind === "advisor" ||
+      focusAgent!.capabilities.includes("earn-portfolio"));
 
   return {
     list_marketplace_agents: tool({
@@ -71,6 +85,76 @@ export function createOrchestratorTools(
             };
           }),
         );
+      },
+    }),
+
+    recommend_agent_for_goal: tool({
+      description:
+        "Recommend which marketplace specialist the user should hire. Concierge must use this for portfolio, earn, and LP questions instead of answering as the specialist.",
+      inputSchema: z.object({
+        goal: z.enum([
+          "portfolio_rebalance",
+          "earn_vaults",
+          "lp_deposit",
+          "lp_withdraw",
+          "lp_full_cycle",
+          "explore_agents",
+        ]),
+        preferV4: z
+          .boolean()
+          .optional()
+          .describe("Prefer Uniswap v4 agents when true"),
+      }),
+      execute: async ({ goal, preferV4 }) => {
+        const agents = await listAllAgents({ discoverEns: true });
+        const specialists = agents.filter((a) => a.kind !== "orchestrator");
+
+        if (goal === "explore_agents") {
+          return {
+            talentPoolUrl: `${marketplaceBaseUrl()}/agents`,
+            agents: specialists.map((agent) => ({
+              id: agent.id,
+              name: agent.name,
+              description: agent.description,
+              kind: agent.kind,
+              hireUrl: agentHireUrl(agent.id),
+            })),
+          };
+        }
+
+        const goalToAgentId: Record<
+          Exclude<typeof goal, "explore_agents">,
+          string
+        > = {
+          portfolio_rebalance: "lifi-earn-balancer",
+          earn_vaults: "lifi-earn-balancer",
+          lp_deposit: preferV4 ? "uniswap-v4-lp" : "uniswap-v3-lp",
+          lp_withdraw: preferV4 ? "composer-v4-lp" : "composer-v3-lp",
+          lp_full_cycle: preferV4 ? "composer-v4-lp" : "composer-v3-lp",
+        };
+
+        const agentId = goalToAgentId[goal];
+        const agent = specialists.find((a) => a.id === agentId);
+        if (!agent) {
+          return {
+            success: false,
+            error: `No agent found for goal: ${goal}`,
+            talentPoolUrl: `${marketplaceBaseUrl()}/agents`,
+          };
+        }
+
+        const persona = getAgentPersona(agent);
+        return {
+          success: true,
+          goal,
+          recommendedAgentId: agent.id,
+          name: agent.name,
+          description: agent.description,
+          tagline: persona.whatYouDo.split(".")[0],
+          hireUrl: agentHireUrl(agent.id),
+          talentPoolUrl: `${marketplaceBaseUrl()}/agents`,
+          message: `Hire **${agent.name}** for this — open ${agentHireUrl(agent.id)} to chat with them directly.`,
+        };
       },
     }),
 
