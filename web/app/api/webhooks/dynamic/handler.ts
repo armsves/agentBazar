@@ -79,5 +79,7 @@ export async function handleWebhookRequest(request: NextRequest) {
       );
   }
 
-  return NextResponse.json(result, { status: 200 });
+  return NextResponse.json(result, {
+    status: result.success ? 200 : 500,
+  });
 }
