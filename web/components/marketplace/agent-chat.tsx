@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Loader2, PenLine, Send } from "lucide-react";
+import { Loader2, PenLine, Send, Star } from "lucide-react";
 
 import { AgentRobotAvatar } from "@/components/marketplace/agent-robot-avatar";
 
@@ -195,6 +195,26 @@ function detectPendingBroadcast(messages: UIMessage[]): boolean {
   return lastSimulateIndex >= 0 && lastSimulateIndex > lastExecuteIndex;
 }
 
+function detectExecuteSuccess(messages: UIMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "assistant") continue;
+    const parts = message.parts as ToolPart[];
+    for (const part of parts) {
+      const name = toolNameFromPart(part);
+      const output = extractToolOutput(part);
+      if (!name || !output || output.success !== true) continue;
+      if (
+        (name === "execute_deposit" || name === "execute_withdraw") &&
+        typeof output.composeHash === "string"
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export type AgentChatProps = {
   agentId?: string;
   agentName?: string;
@@ -213,6 +233,7 @@ export function AgentChat({
   const { primaryWallet, user } = useDynamicContext();
   const [input, setInput] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   const transport = useMemo(
     () =>
@@ -239,31 +260,38 @@ export function AgentChat({
 
   const isBusy = status === "streaming" || status === "submitted";
   const pendingBroadcast = detectPendingBroadcast(messages);
+  const executeSucceeded = detectExecuteSuccess(messages);
   const resolvedAgentId = agentId ?? "agent-bazar-concierge";
   const hasConversation = messages.length > 0;
+  const hasAssistantReply = messages.some((message) => message.role === "assistant");
   const isExpanded = inputFocused || hasConversation || isBusy;
-  const lastMessage = messages[messages.length - 1];
-  const chatDone =
+  const showRatePrompt =
     Boolean(user) &&
-    messages.some((message) => message.role === "user") &&
-    messages.some((message) => message.role === "assistant") &&
-    lastMessage?.role === "assistant" &&
+    hasAssistantReply &&
+    !sessionEnded &&
     !isBusy &&
-    !inputFocused &&
     !pendingBroadcast;
-  const showRating = chatDone;
+  const showRating = Boolean(user) && sessionEnded && !isBusy;
+
+  useEffect(() => {
+    setMessages([]);
+    setSessionEnded(false);
+  }, [agentId, setMessages]);
+
+  useEffect(() => {
+    if (executeSucceeded) {
+      setSessionEnded(true);
+    }
+  }, [executeSucceeded]);
 
   const displayName = agentName ?? (agentId ? agentId : "Agent Bazar Concierge");
   const tagline =
     listing?.tagline ??
     "LLM orchestrator — hires specialists, simulates, you sign once.";
 
-  useEffect(() => {
-    setMessages([]);
-  }, [agentId, setMessages]);
-
   const sendUserMessage = (text: string) => {
     if (!text.trim() || isBusy) return;
+    setSessionEnded(false);
     void sendMessage({ text });
     setInput("");
   };
@@ -389,6 +417,21 @@ export function AgentChat({
               <Send className="size-4" />
             </Button>
           </form>
+
+          {showRatePrompt && (
+            <div className="flex shrink-0 justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground h-auto px-2 py-1 text-xs"
+                onClick={() => setSessionEnded(true)}
+              >
+                <Star className="mr-1.5 size-3.5" />
+                I&apos;m done — rate this agent
+              </Button>
+            </div>
+          )}
 
           {showRating && (
             <AgentChatRating

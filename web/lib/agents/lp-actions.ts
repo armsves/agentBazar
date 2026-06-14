@@ -29,6 +29,7 @@ export async function runDepositFlow(params: {
     usdcAmount: params.input.usdcAmount,
     usdtAmount: params.input.usdtAmount,
     mintNftToProxy: isComposerManagerAgent(params.agentId),
+    skipPreflight: params.input.dryRun === true,
   });
 }
 

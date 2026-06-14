@@ -10,6 +10,14 @@ import { getAgentPersona } from "@/lib/agents/agent-prompts";
 import { getDelegationByAddress } from "@/lib/dynamic/delegation/storage";
 import { normalizeChain } from "@/lib/dynamic/delegation/chain";
 import type { Agent } from "@/lib/agents/types";
+import {
+  LIFI_COMPOSER_PROXY_FACTORY,
+  UNISWAP_V3_POSITION_MANAGER,
+  UNISWAP_V3_SWAP_ROUTER,
+  UNISWAP_V3_USDC_USDT_POOL,
+  USDC,
+  USDT,
+} from "../../../../src/optimism";
 
 export type OrchestratorContext = {
   userId: string;
@@ -275,35 +283,54 @@ export function createOrchestratorTools(
         const half = totalUsdc / 2;
         const atomicHalf = toAtomicUsdc(half);
 
-        const result = await executeAgentAction({
-          userId: context.userId,
-          agentId,
-          input: {
-            address,
-            chain,
-            action: "deposit",
-            usdcAmount: atomicHalf,
-            usdtAmount: atomicHalf,
-            dryRun: true,
-          },
-        });
+        try {
+          const result = await executeAgentAction({
+            userId: context.userId,
+            agentId,
+            input: {
+              address,
+              chain,
+              action: "deposit",
+              usdcAmount: atomicHalf,
+              usdtAmount: atomicHalf,
+              dryRun: true,
+            },
+          });
 
-        if (!result.dryRun) {
-          return { success: false, error: "Expected dry-run result" };
+          if (!result.dryRun) {
+            return { success: false, error: "Expected dry-run result" };
+          }
+
+          if (result.action !== "deposit") {
+            return { success: false, error: "Expected deposit dry-run result" };
+          }
+
+          return {
+            success: true,
+            agentId,
+            totalUsdcDeposit: Number(result.preview.totalUsdcDeposit) / 1e6,
+            usdcLegAtomic: result.preview.usdcAmount,
+            usdtLegAtomic: result.preview.usdtAmount,
+            userProxy: result.preview.userProxy,
+            approvalsRequired: result.preview.compile.approvals?.length ?? 0,
+            guardrails: result.grant,
+            contracts: {
+              pool: UNISWAP_V3_USDC_USDT_POOL,
+              usdc: USDC,
+              usdt: USDT,
+              swapRouter: UNISWAP_V3_SWAP_ROUTER,
+              positionManager: UNISWAP_V3_POSITION_MANAGER,
+              composerProxyFactory: LIFI_COMPOSER_PROXY_FACTORY,
+            },
+            decimalsNote:
+              "USDC/USDT use 6 decimals. totalUsdc is split 50/50 into atomic legs (e.g. 1 USDC → 500000 + 500000).",
+          };
+        } catch (err) {
+          return {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
         }
-
-        if (result.action !== "deposit") {
-          return { success: false, error: "Expected deposit dry-run result" };
-        }
-
-        return {
-          success: true,
-          agentId,
-          totalUsdcDeposit: Number(result.preview.totalUsdcDeposit) / 1e6,
-          userProxy: result.preview.userProxy,
-          approvalsRequired: result.preview.compile.approvals?.length ?? 0,
-          guardrails: result.grant,
-        };
       },
     }),
 

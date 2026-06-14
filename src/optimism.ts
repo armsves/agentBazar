@@ -27,6 +27,10 @@ export const UNISWAP_V3_USDC_USDT_POOL =
 export const PERMIT2 =
   '0x000000000022D473030f116dDEE9f6B43aC78BA3' as const;
 
+/** LiFi Composer ProxyFactory on Optimism — main compose tx target. */
+export const LIFI_COMPOSER_PROXY_FACTORY =
+  '0xe174D02351656a883f6626497C86684e849efB35' as const;
+
 /** Uniswap v4 PositionManager on Optimism. */
 export const UNISWAP_V4_POSITION_MANAGER =
   '0x3c3ea4b57a46241e54610e5f022e5c45859a1017' as const;

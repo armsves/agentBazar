@@ -2,6 +2,7 @@ import type { ComposeCompileSuccessData } from "@lifi/compose-spec";
 
 import type { UserAgentGrant } from "@/lib/agents/types";
 import {
+  LIFI_COMPOSER_PROXY_FACTORY,
   PERMIT2,
   USDC,
   USDT,
@@ -26,9 +27,10 @@ const ALLOWED_V3 = new Set(
   [
     USDC,
     USDT,
+    PERMIT2,
+    LIFI_COMPOSER_PROXY_FACTORY,
     UNISWAP_V3_SWAP_ROUTER,
     UNISWAP_V3_POSITION_MANAGER,
-    PERMIT2,
   ].map((a) => a.toLowerCase()),
 );
 
@@ -37,6 +39,9 @@ const ALLOWED_V4 = new Set(
     USDC,
     USDT,
     PERMIT2,
+    LIFI_COMPOSER_PROXY_FACTORY,
+    // v4 deposit still swaps USDC→USDT via the v3 SwapRouter02 before minting
+    UNISWAP_V3_SWAP_ROUTER,
     UNISWAP_V4_POSITION_MANAGER,
     UNISWAP_V4_POOL_MANAGER,
     UNISWAP_V4_STATE_VIEW,

@@ -25,6 +25,8 @@ export interface DepositInput {
   readonly usdtAmount?: string;
   /** Mint LP NFT to LiFi user proxy so Composer can withdraw later. */
   readonly mintNftToProxy?: boolean;
+  /** Skip on-chain balance checks (dry-run / simulation). */
+  readonly skipPreflight?: boolean;
 }
 
 export interface WithdrawInput {
@@ -85,12 +87,14 @@ export async function buildAndCompileDeposit(
 
   const sdk = createComposeSdk({ baseUrl, apiKey: env.LIFI_API_KEY });
 
-  await assertWalletReady(
-    input.owner,
-    BigInt(usdcAmount),
-    BigInt(usdtAmount),
-    { usdcOnlyDeposit: true },
-  );
+  if (!input.skipPreflight) {
+    await assertWalletReady(
+      input.owner,
+      BigInt(usdcAmount),
+      BigInt(usdtAmount),
+      { usdcOnlyDeposit: true },
+    );
+  }
 
   let liquidity: bigint | undefined;
   let previewUserProxy: string | undefined;
