@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   title: "Agent Bazar — Hire DeFi Agents on Optimism",
   description:
     "A DeFi talent marketplace. Hire LP agents, earn advisors, and an AI concierge that act on your Dynamic embedded wallet via delegated signing with spend guardrails.",
+  icons: {
+    icon: "/brand/icon-dark.png",
+    apple: "/brand/icon-dark.png",
+  },
 };
 
 interface RootLayoutProps {

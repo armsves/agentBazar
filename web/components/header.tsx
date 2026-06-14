@@ -1,7 +1,7 @@
 import Link from "next/link";
 
+import AgentBazarLogo from "./brand/agent-bazar-logo";
 import DynamicWidget from "./dynamic/dynamic-widget";
-import DynamicLogo from "./dynamic/logo";
 import LogoutButton from "./dynamic/logout-button";
 import { HamburgerMenu } from "./hamburger-menu";
 import { ModeToggle } from "./mode-toggle";
@@ -34,7 +34,7 @@ export default function Header() {
     >
       <div className="pl-4 h-[40px] flex items-center">
         <Link href="/">
-          <DynamicLogo />
+          <AgentBazarLogo />
         </Link>
       </div>
       <div className="hidden md:flex gap-2 pr-4 items-center">
