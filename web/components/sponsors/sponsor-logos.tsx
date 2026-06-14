@@ -45,8 +45,8 @@ const sponsors = [
         src="/sponsors/lifi.png"
         alt="LI.FI"
         width={72}
-        height={18}
-        className="h-[16px] w-auto invert dark:invert-0"
+        height={22}
+        className="h-[18px] w-auto invert dark:invert-0"
       />
     ),
   },
