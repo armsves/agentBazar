@@ -4,7 +4,10 @@ import {
   type AuthenticatedUser,
   userOwnsAddress,
 } from "@/lib/dynamic/dynamic-auth";
-import { getDelegationByAddress } from "@/lib/dynamic/delegation";
+import {
+  deleteDelegationByAddress,
+  getDelegationByAddress,
+} from "@/lib/dynamic/delegation";
 import { DelegationQuerySchema } from "./schema";
 
 /**
@@ -87,5 +90,61 @@ export async function handleGetDelegationRequest(
       },
     },
     { status: 200 }
+  );
+}
+
+/**
+ * Handler for DELETE /api/delegation requests
+ *
+ * Removes the delegation record from KV for the authenticated user's wallet.
+ * Used as a fallback when the revoke webhook is delayed or fails.
+ */
+export async function handleDeleteDelegationRequest(
+  request: NextRequest,
+  user: AuthenticatedUser,
+): Promise<NextResponse> {
+  const { searchParams } = request.url
+    ? new URL(request.url)
+    : { searchParams: new URLSearchParams() };
+
+  const validationResult = DelegationQuerySchema.safeParse({
+    address: searchParams.get("address"),
+    chain: searchParams.get("chain"),
+  });
+
+  if (!validationResult.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Invalid query parameters",
+        details: validationResult.error.issues,
+      },
+      { status: 400 },
+    );
+  }
+
+  const { address, chain } = validationResult.data;
+
+  if (!userOwnsAddress(user, address)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "You are not authorized to delete this delegation",
+      },
+      { status: 403 },
+    );
+  }
+
+  const deleted = await deleteDelegationByAddress(address, chain);
+
+  return NextResponse.json(
+    {
+      success: true,
+      deleted,
+      message: deleted
+        ? "Delegation removed from KV"
+        : "No delegation found in KV",
+    },
+    { status: 200 },
   );
 }
