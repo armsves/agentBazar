@@ -13,10 +13,13 @@
  */
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, Code2 } from "lucide-react";
 import {
+  dynamicEvents,
   useDynamicContext,
+  useRefreshAuth,
+  useRefreshUser,
   useWalletDelegation,
 } from "@dynamic-labs/sdk-react-core";
 
@@ -28,8 +31,10 @@ import DelegationStatusHeader from "./components/delegation-status-header";
 import ConnectedWalletInfo from "./components/connected-wallet-info";
 import ConnectWalletPrompt from "./components/connect-wallet-prompt";
 import WalletStatusTable from "./components/wallet-status-table";
+import DelegationEligibilityNotice from "./components/delegation-eligibility-notice";
 import DelegationInfoBox from "@/components/info/delegation-info-box";
 import DynamicSdkGate from "@/components/dynamic/dynamic-sdk-gate";
+import { useDelegationStatus } from "@/lib/dynamic/delegation/useDelegationStatus";
 
 type DelegationTab = "modal" | "custom";
 
@@ -37,15 +42,41 @@ export default function DelegatedAccess() {
   const { primaryWallet } = useDynamicContext();
   const {
     delegatedAccessEnabled,
-    getWalletsDelegatedStatus,
     requiresDelegation,
   } = useWalletDelegation();
-  const [activeTab, setActiveTab] = useState<DelegationTab>("modal");
-
-  const walletStatuses = getWalletsDelegatedStatus();
-  const primaryWalletDelegationStatus = walletStatuses.find(
-    (wallet) => wallet.address === primaryWallet?.address,
+  const { getEffectiveStatus, getEffectiveWalletStatuses } = useDelegationStatus(
+    primaryWallet?.address,
+    primaryWallet?.chain ?? "EVM",
   );
+  const refreshAuth = useRefreshAuth();
+  const refreshUser = useRefreshUser();
+  const [activeTab, setActiveTab] = useState<DelegationTab>("modal");
+  const [, setRefreshTick] = useState(0);
+
+  const walletStatuses = getEffectiveWalletStatuses();
+  const primaryWalletDelegationStatus = primaryWallet
+    ? getEffectiveStatus(primaryWallet.address)
+    : undefined;
+
+  useEffect(() => {
+    const refresh = async () => {
+      await Promise.all([refreshAuth(), refreshUser()]);
+      setRefreshTick((tick) => tick + 1);
+    };
+
+    const events = dynamicEvents as {
+      on: (event: string, handler: () => void) => void;
+      removeListener: (event: string, handler: () => void) => void;
+    };
+
+    events.on("embeddedWalletDelegationCompleted", refresh);
+    events.on("embeddedWalletDelegationFailed", refresh);
+
+    return () => {
+      events.removeListener("embeddedWalletDelegationCompleted", refresh);
+      events.removeListener("embeddedWalletDelegationFailed", refresh);
+    };
+  }, [refreshAuth, refreshUser]);
 
   return (
     <DynamicSdkGate>
@@ -61,6 +92,7 @@ export default function DelegatedAccess() {
           {primaryWallet ? (
             <div className="space-y-4">
               <ConnectedWalletInfo address={primaryWallet.address} />
+              <DelegationEligibilityNotice />
               <WalletStatusTable walletStatuses={walletStatuses} />
             </div>
           ) : (
@@ -70,7 +102,7 @@ export default function DelegatedAccess() {
       </div>
 
       {/* Tabbed Delegation Approaches */}
-      {primaryWallet && primaryWalletDelegationStatus?.status === "pending" && (
+      {primaryWallet && primaryWalletDelegationStatus === "pending" && (
         <div className="space-y-4">
           {/* Tab Navigation */}
           <DelegationTabs activeTab={activeTab} onTabChange={setActiveTab} />
@@ -85,8 +117,7 @@ export default function DelegatedAccess() {
       )}
 
       {/* Methods Panel - shows when delegated */}
-      {primaryWallet &&
-        primaryWalletDelegationStatus?.status === "delegated" && (
+      {primaryWallet && primaryWalletDelegationStatus === "delegated" && (
           <>
             <DelegatedAccessMethods />
             <RecoveryOnlyFlagTest />
