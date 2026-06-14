@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Droplets, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useDynamicContext, useWalletDelegation } from "@/lib/dynamic";
+import { useDynamicContext } from "@/lib/dynamic";
 import { authFetch } from "@/lib/dynamic/auth-fetch";
+import { useDelegationStatus } from "@/lib/dynamic/delegation/useDelegationStatus";
+
+const OPTIMISM_CHAIN_ID = 10;
 
 interface MintResponse {
   success: boolean;
@@ -29,7 +32,10 @@ interface MintResponse {
 
 export default function LpMint() {
   const { primaryWallet, user } = useDynamicContext();
-  const { getWalletsDelegatedStatus } = useWalletDelegation();
+  const { getEffectiveStatus, hasServerShare } = useDelegationStatus(
+    primaryWallet?.address,
+    "EVM",
+  );
   const [version, setVersion] = useState<"v3" | "v4">("v3");
   const [usdcAmount, setUsdcAmount] = useState("1000000");
   const [usdtAmount, setUsdtAmount] = useState("1000000");
@@ -38,15 +44,49 @@ export default function LpMint() {
     null,
   );
   const [result, setResult] = useState<MintResponse | null>(null);
+  const [chainId, setChainId] = useState<number | null>(null);
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNetwork() {
+      if (!primaryWallet) {
+        setChainId(null);
+        return;
+      }
+
+      const network = await primaryWallet.connector.getNetwork(true);
+      if (!cancelled) {
+        setChainId(Number(network));
+      }
+    }
+
+    void loadNetwork();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryWallet]);
 
   const address = primaryWallet?.address;
-  const delegationStatus = address
-    ? getWalletsDelegatedStatus().find((w) => w.address === address)?.status
-    : undefined;
-  const isDelegated = delegationStatus === "delegated";
+  const isOnOptimism = chainId === OPTIMISM_CHAIN_ID;
+  const isDelegated = getEffectiveStatus(address) === "delegated" && hasServerShare;
+
+  async function handleSwitchToOptimism() {
+    if (!primaryWallet) return;
+
+    setIsSwitchingNetwork(true);
+    try {
+      await primaryWallet.switchNetwork(OPTIMISM_CHAIN_ID);
+      const network = await primaryWallet.connector.getNetwork(true);
+      setChainId(Number(network));
+    } finally {
+      setIsSwitchingNetwork(false);
+    }
+  }
 
   async function handleDeposit(dryRun: boolean) {
-    if (!address || !isDelegated) return;
+    if (!address || !isDelegated || !isOnOptimism) return;
 
     setIsLoading(true);
     setLoadingAction(dryRun ? "build" : "execute");
@@ -99,8 +139,31 @@ export default function LpMint() {
         ) : !isDelegated ? (
           <p className="text-muted-foreground text-sm">
             Wallet connected ({address.slice(0, 6)}…{address.slice(-4)}). Approve
-            delegation in the section below before building or executing a deposit.
+            delegation below — the server must receive the webhook share in KV before
+            minting works.
           </p>
+        ) : !isOnOptimism ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-amber-700 dark:text-amber-300">
+              Deposits run on Optimism (chain 10). Your wallet is on chain{" "}
+              {chainId ?? "unknown"}.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleSwitchToOptimism()}
+              disabled={isSwitchingNetwork}
+            >
+              {isSwitchingNetwork ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Switching…
+                </>
+              ) : (
+                "Switch wallet to Optimism"
+              )}
+            </Button>
+          </div>
         ) : (
           <>
             <p className="text-sm text-green-700 dark:text-green-400">
