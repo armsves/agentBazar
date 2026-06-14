@@ -70,7 +70,7 @@ export default function AgentsMarketplacePage() {
   }, [loadCatalog]);
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-8 pt-16">
+    <div className="flex w-full max-w-6xl flex-col gap-8 pt-16">
       <div className="flex flex-col gap-2">
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
           <Store className="size-6" />
@@ -89,7 +89,7 @@ export default function AgentsMarketplacePage() {
             <Link href="/dashboard">My installed agents</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/">Delegation setup</Link>
+            <Link href="/setup">Wallet setup</Link>
           </Button>
         </div>
       </div>
@@ -108,7 +108,7 @@ export default function AgentsMarketplacePage() {
       ) : error ? (
         <p className="text-destructive text-sm">{error}</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {agents.map((agent) => (
             <AgentCard
               key={agent.id}

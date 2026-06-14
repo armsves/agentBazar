@@ -96,7 +96,7 @@ export default function DashboardPage() {
               </Link>
             </p>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {installed.map(({ grant, agent }) =>
                 agent ? (
                   <AgentCard

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Briefcase, X } from "lucide-react";
 
 import { AgentRobotAvatar } from "@/components/marketplace/agent-robot-avatar";
+import { ForHireStamp } from "@/components/marketplace/for-hire-stamp";
 import { AgentChat } from "@/components/marketplace/agent-chat";
 import { Button } from "@/components/ui/button";
 import type { Agent } from "@/lib/agents/types";
@@ -41,7 +42,11 @@ export function AgentHireDialog({ agent, open, onClose }: AgentHireDialogProps) 
         className="bg-background flex h-[min(92vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border shadow-2xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b px-4 py-3">
+        <div className="relative border-b px-4 py-3">
+          <ForHireStamp
+            size="sm"
+            className="absolute right-12 top-2 -rotate-12 opacity-90"
+          />
           <div className="flex items-start justify-between gap-3">
             <AgentRobotAvatar agentId={agent.id} size="lg" />
             <div className="min-w-0 flex-1">

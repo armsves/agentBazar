@@ -9,9 +9,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Agent Bazar — Dynamic Delegated DeFi Agents",
+  title: "Agent Bazar — Hire DeFi Agents on Optimism",
   description:
-    "Marketplace of DeFi agents that act on your Dynamic embedded wallet via delegated MPC signing, with spend caps and contract guardrails.",
+    "A DeFi talent marketplace. Hire LP agents, earn advisors, and an AI concierge that act on your Dynamic embedded wallet via delegated signing with spend guardrails.",
 };
 
 interface RootLayoutProps {
@@ -24,7 +24,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <body className={inter.className}>
         <Providers>
           <Header />
-          <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+          <div className="bg-muted flex min-h-svh flex-col items-center justify-start gap-6 p-6 pb-24 pt-20 md:p-10 md:pt-24">
             {children}
           </div>
           <Footer />

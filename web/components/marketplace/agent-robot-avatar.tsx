@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 
 import type { Agent } from "@/lib/agents/types";
+import { ForHireStamp } from "@/components/marketplace/for-hire-stamp";
 
 export type RobotAvatarMeta = {
   label: string;
@@ -291,9 +292,10 @@ export function AgentRobotHero({ agentId, className = "" }: { agentId: string; c
     <div
       className={`bg-gradient-to-br ${meta.bg} relative overflow-hidden rounded-2xl border border-dashed border-black/10 dark:border-white/10 ${className}`}
     >
-      <div className="absolute right-3 top-3 rotate-6 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black/70 shadow-sm dark:bg-black/50 dark:text-white/80">
-        for hire
-      </div>
+      <ForHireStamp
+        size="md"
+        className="absolute right-2 top-2 z-10 -rotate-12"
+      />
       <AgentRobotAvatar agentId={agentId} size="hero" showFrame={false} />
       <p className="text-muted-foreground pb-3 text-center text-[11px] font-medium italic">
         {meta.label}
