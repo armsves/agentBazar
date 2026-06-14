@@ -15,11 +15,12 @@ import type { Agent, UserAgentGrant } from "@/lib/agents/types";
 
 interface AgentCardProps {
   agent: Agent;
+  ensName?: string | null;
   installed?: boolean;
   grant?: UserAgentGrant | null;
 }
 
-export function AgentCard({ agent, installed, grant }: AgentCardProps) {
+export function AgentCard({ agent, ensName, installed, grant }: AgentCardProps) {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
@@ -31,6 +32,9 @@ export function AgentCard({ agent, installed, grant }: AgentCardProps) {
           )}
         </CardTitle>
         <CardDescription>{agent.description}</CardDescription>
+        {ensName && (
+          <p className="text-muted-foreground font-mono text-xs">{ensName}</p>
+        )}
       </CardHeader>
       <CardContent className="mt-auto flex flex-col gap-3">
         <div className="flex flex-wrap gap-1">

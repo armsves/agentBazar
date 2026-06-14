@@ -5,13 +5,14 @@ import { Loader2, Store } from "lucide-react";
 import Link from "next/link";
 
 import { AgentCard } from "@/components/marketplace/agent-card";
+import { OrchestratorChat } from "@/components/marketplace/orchestrator-chat";
 import { Button } from "@/components/ui/button";
 import type { Agent, UserAgentGrant } from "@/lib/agents/types";
-import { listAgents } from "@/lib/agents/registry";
 import { useDynamicContext } from "@/lib/dynamic";
 import { authFetch } from "@/lib/dynamic/auth-fetch";
 
 type CatalogAgent = Agent & {
+  ensName?: string | null;
   installed: boolean;
   grant: UserAgentGrant | null;
 };
@@ -24,14 +25,21 @@ export default function AgentsMarketplacePage() {
 
   const loadCatalog = useCallback(async () => {
     if (!user) {
-      setAgents(
-        listAgents().map((agent) => ({
-          ...agent,
-          installed: false,
-          grant: null,
-        })),
-      );
-      setLoading(false);
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch("/api/agents/catalog");
+        const data = await response.json();
+        if (!data.success) {
+          setError(data.error ?? "Failed to load agents");
+          return;
+        }
+        setAgents(data.agents);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load agents");
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -70,6 +78,9 @@ export default function AgentsMarketplacePage() {
           and an on-chain contract allowlist before any transaction is signed.
         </p>
         <div className="flex gap-2">
+          <Button variant="default" size="sm" asChild>
+            <Link href="/chat">Talk to Concierge</Link>
+          </Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard">My installed agents</Link>
           </Button>
@@ -78,6 +89,8 @@ export default function AgentsMarketplacePage() {
           </Button>
         </div>
       </div>
+
+      <OrchestratorChat />
 
       {!user ? (
         <p className="text-muted-foreground text-sm">
@@ -96,6 +109,7 @@ export default function AgentsMarketplacePage() {
             <AgentCard
               key={agent.id}
               agent={agent}
+              ensName={agent.ensName}
               installed={agent.installed}
               grant={agent.grant}
             />

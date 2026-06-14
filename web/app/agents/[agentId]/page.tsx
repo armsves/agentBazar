@@ -7,9 +7,9 @@ import { useParams } from "next/navigation";
 
 import { AgentGrantForm } from "@/components/marketplace/agent-grant-form";
 import { ExecutionPanel } from "@/components/marketplace/execution-panel";
+import { OrchestratorChat } from "@/components/marketplace/orchestrator-chat";
 import { Button } from "@/components/ui/button";
 import type { Agent, UserAgentGrant } from "@/lib/agents/types";
-import { getAgentById } from "@/lib/agents/registry";
 import { useDynamicContext } from "@/lib/dynamic";
 import { authFetch } from "@/lib/dynamic/auth-fetch";
 
@@ -18,37 +18,46 @@ export default function AgentDetailPage() {
   const agentId = params.agentId as string;
   const { primaryWallet, user } = useDynamicContext();
 
-  const staticAgent = getAgentById(agentId);
-  const [agent, setAgent] = useState<Agent | null>(staticAgent ?? null);
+  const [agent, setAgent] = useState<Agent | null>(null);
   const [grant, setGrant] = useState<UserAgentGrant | null>(null);
   const [installed, setInstalled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadAgent = useCallback(async () => {
-    if (!staticAgent) {
-      setError("Agent not found");
-      setLoading(false);
-      return;
-    }
-
-    setAgent(staticAgent);
-
-    if (!user) {
-      setInstalled(false);
-      setGrant(null);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
+
+    if (!user) {
+      try {
+        const response = await fetch("/api/agents/catalog");
+        const data = await response.json();
+        const found = data.agents?.find(
+          (item: Agent) => item.id === agentId,
+        );
+        if (!found) {
+          setError("Agent not found");
+          setAgent(null);
+        } else {
+          setAgent(found);
+          setInstalled(false);
+          setGrant(null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load agent");
+        setAgent(null);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     try {
       const response = await authFetch(`/api/agents/${agentId}`);
       const data = await response.json();
       if (!data.success) {
         setError(data.error ?? "Agent not found");
+        setAgent(null);
         return;
       }
       setAgent(data.agent);
@@ -56,10 +65,11 @@ export default function AgentDetailPage() {
       setInstalled(data.installed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agent");
+      setAgent(null);
     } finally {
       setLoading(false);
     }
-  }, [agentId, staticAgent, user]);
+  }, [agentId, user]);
 
   useEffect(() => {
     void loadAgent();
@@ -125,7 +135,11 @@ export default function AgentDetailPage() {
         }}
       />
 
-      <ExecutionPanel agent={agent} installed={installed} />
+      {agent.kind === "orchestrator" ? (
+        <OrchestratorChat />
+      ) : (
+        <ExecutionPanel agent={agent} installed={installed} />
+      )}
 
       {grant && (
         <p className="text-muted-foreground text-xs">

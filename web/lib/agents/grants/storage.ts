@@ -3,7 +3,7 @@ import {
   DEFAULT_MAX_USDC_DAILY,
   DEFAULT_MAX_USDC_PER_TX,
 } from "@/lib/agents/constants";
-import { getAgentById } from "@/lib/agents/registry";
+import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import { normalizeChain } from "@/lib/dynamic/delegation/chain";
 import { getRedisClient } from "@/lib/redis";
 
@@ -48,7 +48,7 @@ export async function installGrant(params: {
   const chain = normalizeChain(params.chain);
   const now = new Date().toISOString();
 
-  const agent = getAgentById(params.agentId);
+  const agent = await getAgentByIdMerged(params.agentId);
   const allowedVersions: UniswapVersion[] = agent ? [agent.version] : [];
 
   const grant: UserAgentGrant = {

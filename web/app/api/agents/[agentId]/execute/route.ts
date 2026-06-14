@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { executeAgentAction } from "@/lib/agents/execute";
-import { getAgentById } from "@/lib/agents/registry";
+import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import { depositMetadata } from "@/lib/composer/runMint";
 import { userOwnsAddress, withAuth } from "@/lib/dynamic/dynamic-auth";
 import { ExecuteAgentSchema } from "../../schema";
@@ -12,12 +12,17 @@ type AgentParams = { agentId: string };
 export const POST = withAuth<AgentParams>(
   async (req, { user, params }) => {
     const { agentId } = params;
-    const agent = getAgentById(agentId);
+    const agent = await getAgentByIdMerged(agentId, { discoverEns: true });
 
-    if (!agent) {
+    if (!agent || agent.kind === "orchestrator") {
       return NextResponse.json(
-        { success: false, error: `Agent not found: ${agentId}` },
-        { status: 404 },
+        {
+          success: false,
+          error: agent
+            ? "Use /api/chat for the Concierge orchestrator"
+            : `Agent not found: ${agentId}`,
+        },
+        { status: agent ? 400 : 404 },
       );
     }
 

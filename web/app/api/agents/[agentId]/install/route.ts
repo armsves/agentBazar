@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { installGrant, revokeGrant } from "@/lib/agents/grants/storage";
-import { getAgentById } from "@/lib/agents/registry";
+import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import {
   userOwnsAddress,
   withAuth,
@@ -15,7 +15,7 @@ type AgentParams = { agentId: string };
 export const POST = withAuth<AgentParams>(
   async (req, { user, params }) => {
     const { agentId } = params;
-    const agent = getAgentById(agentId);
+    const agent = await getAgentByIdMerged(agentId, { discoverEns: true });
 
     if (!agent) {
       return NextResponse.json(

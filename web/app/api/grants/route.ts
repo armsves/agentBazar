@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { listUserExecutions } from "@/lib/agents/executions/storage";
 import { listUserGrants } from "@/lib/agents/grants/storage";
-import { getAgentById } from "@/lib/agents/registry";
+import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import {
   type AuthenticatedUser,
   withAuth,
@@ -15,10 +15,12 @@ export const GET = withAuth(
     const grants = await listUserGrants(user.sub);
     const executions = await listUserExecutions(user.sub);
 
-    const installed = grants.map((grant) => ({
-      grant,
-      agent: getAgentById(grant.agentId),
-    }));
+    const installed = await Promise.all(
+      grants.map(async (grant) => ({
+        grant,
+        agent: await getAgentByIdMerged(grant.agentId),
+      })),
+    );
 
     return NextResponse.json({
       success: true,

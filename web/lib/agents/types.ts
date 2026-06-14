@@ -2,11 +2,14 @@ export type AgentCapability = "uniswap-v3-lp" | "uniswap-v4-lp";
 
 export type UniswapVersion = "v3" | "v4";
 
+export type AgentKind = "orchestrator" | "specialist";
+
 export interface Agent {
   id: string;
   name: string;
   description: string;
   longDescription: string;
+  kind: AgentKind;
   capabilities: AgentCapability[];
   version: UniswapVersion;
   chainId: number;

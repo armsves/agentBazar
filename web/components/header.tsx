@@ -11,6 +11,9 @@ export default function Header() {
   const navItems = (
     <>
       <Button variant="link" asChild>
+        <Link href="/chat">Concierge</Link>
+      </Button>
+      <Button variant="link" asChild>
         <Link href="/agents">Agents</Link>
       </Button>
       <Button variant="link" asChild>

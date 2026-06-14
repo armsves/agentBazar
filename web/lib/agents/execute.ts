@@ -7,7 +7,7 @@ import {
   withAllowedVersion,
   persistGrant,
 } from "@/lib/agents/grants/storage";
-import { getAgentById } from "@/lib/agents/registry";
+import { getAgentByIdMerged } from "@/lib/agents/registry/merge";
 import type { AgentExecuteInput } from "@/lib/agents/types";
 import {
   buildAndCompileDeposit,
@@ -37,7 +37,7 @@ export async function executeAgentAction(params: {
   agentId: string;
   input: AgentExecuteInput;
 }): Promise<AgentExecuteResult> {
-  const agent = getAgentById(params.agentId);
+  const agent = await getAgentByIdMerged(params.agentId);
   if (!agent) {
     throw new Error(`Unknown agent: ${params.agentId}`);
   }
