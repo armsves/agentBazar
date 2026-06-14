@@ -9,8 +9,8 @@ export default function Main() {
     <div className="flex w-full max-w-2xl flex-col gap-8 pt-16">
       <DelegationHero />
       <DelegationSteps />
-      <LpMint />
       <DelegatedAccess />
+      <LpMint />
       <DelegationUseCases />
     </div>
   );

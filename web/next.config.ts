@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js"],
     };
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@dynamic-labs/sdk-internal-nonce": path.join(
+        __dirname,
+        "node_modules/@dynamic-labs/sdk-react-core/src/lib/store/state/nonce/nonce.js",
+      ),
+    };
     config.externals.push("pino-pretty", "lokijs", "encoding");
     return config;
   },
