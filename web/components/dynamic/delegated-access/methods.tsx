@@ -13,9 +13,13 @@ import { Button } from "@/components/ui/button";
 import {
   ChainEnum,
   useDynamicContext,
+  useRefreshAuth,
+  useRefreshUser,
   useWalletDelegation,
 } from "@/lib/dynamic";
 import { authFetch } from "@/lib/dynamic/auth-fetch";
+import { useDelegateWallet } from "@/lib/dynamic/delegation/useDelegateWallet";
+import { useDelegationStatus } from "@/lib/dynamic/delegation/useDelegationStatus";
 import ResponseDisplay from "./components/response-display";
 
 interface DelegationResponse {
@@ -43,7 +47,14 @@ type ActionType = "getKey" | "sign" | "revoke" | null;
 
 export default function DelegatedAccessMethods() {
   const { user, primaryWallet } = useDynamicContext();
-  const { revokeDelegation } = useWalletDelegation();
+  const { getWalletsDelegatedStatus } = useWalletDelegation();
+  const refreshAuth = useRefreshAuth();
+  const refreshUser = useRefreshUser();
+  const { revokeWallet } = useDelegateWallet();
+  const { refreshServerShare } = useDelegationStatus(
+    primaryWallet?.address,
+    primaryWallet?.chain ?? "EVM",
+  );
 
   const [result, setResult] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -59,17 +70,29 @@ export default function DelegatedAccessMethods() {
   }
 
   async function handleRevokeDelegation(address: string) {
+    const walletStatus = getWalletsDelegatedStatus().find(
+      (wallet) => wallet.address.toLowerCase() === address.toLowerCase(),
+    );
+    const chainName = (walletStatus?.chain ??
+      primaryWallet?.chain ??
+      ChainEnum.Evm) as ChainEnum;
+
     try {
       setIsLoading(true);
       setActiveAction("revoke");
       setError(null);
       setResult("");
 
-      await revokeDelegation([
-        { accountAddress: address, chainName: ChainEnum.Evm },
-      ]);
+      await revokeWallet({
+        accountAddress: address,
+        chainName,
+      });
 
-      setResult("Delegation revoked successfully");
+      await Promise.all([refreshAuth(), refreshUser(), refreshServerShare()]);
+
+      setResult(
+        "Delegation revoked — server key share removed and Dynamic MPC access revoked.",
+      );
       setLastAction("revoke");
     } catch (err) {
       console.error("Revocation error:", err);
@@ -98,8 +121,8 @@ export default function DelegatedAccessMethods() {
 
       const response = await authFetch(
         `/api/delegation?address=${encodeURIComponent(
-          primaryWallet.address
-        )}&chain=${encodeURIComponent(primaryWallet.chain)}`
+          primaryWallet.address,
+        )}&chain=${encodeURIComponent("EVM")}`
       );
       const data: DelegationResponse = await response.json();
 
@@ -145,7 +168,7 @@ export default function DelegatedAccessMethods() {
         method: "POST",
         body: JSON.stringify({
           address: primaryWallet.address,
-          chain: primaryWallet.chain,
+          chain: "EVM",
           message: message.trim(),
         }),
       });
