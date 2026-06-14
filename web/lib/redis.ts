@@ -23,12 +23,15 @@ let vercelKvClient: VercelKV | null = null;
 let ioredisClient: Redis | null = null;
 
 type RedisClient = {
-  set(key: string, value: string): Promise<void | string>;
-  get(key: string): Promise<string | null>;
+  set(key: string, value: string | object): Promise<void | string>;
+  get(key: string): Promise<string | object | null>;
   del(...keys: string[]): Promise<number>;
   sadd(key: string, ...members: string[]): Promise<number>;
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
+  lpush(key: string, ...values: string[]): Promise<number>;
+  ltrim(key: string, start: number, stop: number): Promise<void | string>;
+  lrange(key: string, start: number, stop: number): Promise<string[]>;
   keys(pattern: string): Promise<string[]>;
 };
 
@@ -81,6 +84,17 @@ function wrapVercelKV(kv: VercelKV): RedisClient {
       if (!result) return [];
       return Array.isArray(result) ? result.map(String) : [String(result)];
     },
+    async lpush(key: string, ...values: string[]) {
+      return kv.lpush(key, ...values);
+    },
+    async ltrim(key: string, start: number, stop: number) {
+      await kv.ltrim(key, start, stop);
+    },
+    async lrange(key: string, start: number, stop: number) {
+      const result = await kv.lrange(key, start, stop);
+      if (!result) return [];
+      return Array.isArray(result) ? result.map(String) : [String(result)];
+    },
     async keys(pattern: string) {
       const result = await kv.keys(pattern);
       return result || [];
@@ -117,12 +131,19 @@ export function getRedisClient(): RedisClient {
 
   const redis = getIoredisClient();
   return {
-    set: (key, value) => redis.set(key, value),
+    set: (key, value) =>
+      redis.set(
+        key,
+        typeof value === "string" ? value : JSON.stringify(value),
+      ),
     get: (key) => redis.get(key),
     del: (...keys) => redis.del(...keys),
     sadd: (key, ...members) => redis.sadd(key, ...members),
     srem: (key, ...members) => redis.srem(key, ...members),
     smembers: (key) => redis.smembers(key),
+    lpush: (key, ...values) => redis.lpush(key, ...values),
+    ltrim: (key, start, stop) => redis.ltrim(key, start, stop),
+    lrange: (key, start, stop) => redis.lrange(key, start, stop),
     keys: (pattern) => redis.keys(pattern),
   };
 }

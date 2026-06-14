@@ -101,29 +101,42 @@ export function userOwnsAddress(
   );
 }
 
-type AuthenticatedRequestHandler = (
+type AuthenticatedRequestHandler<TParams = Record<string, never>> = (
   req: NextRequest,
-  { user }: { user: AuthenticatedUser }
+  ctx: { user: AuthenticatedUser; params: TParams },
 ) => Promise<NextResponse> | NextResponse;
 
-export const withAuth =
-  (handler: AuthenticatedRequestHandler) =>
-  async (req: NextRequest): Promise<NextResponse> => {
+export function withAuth(
+  handler: AuthenticatedRequestHandler<Record<string, never>>,
+): (req: NextRequest) => Promise<NextResponse>;
+export function withAuth<TParams extends Record<string, string>>(
+  handler: AuthenticatedRequestHandler<TParams>,
+): (
+  req: NextRequest,
+  ctx: { params: Promise<TParams> },
+) => Promise<NextResponse>;
+export function withAuth<TParams extends Record<string, string>>(
+  handler: AuthenticatedRequestHandler<TParams>,
+) {
+  return async (
+    req: NextRequest,
+    routeContext?: { params: Promise<TParams> },
+  ): Promise<NextResponse> => {
     try {
       const authHeader = req.headers.get("authorization");
 
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return NextResponse.json(
           { error: "Authorization header with Bearer token required" },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
-      const token = authHeader.slice(7); // Remove "Bearer " prefix
+      const token = authHeader.slice(7);
       if (!token) {
         return NextResponse.json(
           { error: "Authorization token not found" },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
@@ -132,15 +145,21 @@ export const withAuth =
       if (!user) {
         return NextResponse.json(
           { error: "Invalid authentication token" },
-          { status: 401 }
+          { status: 401 },
         );
       }
-      return handler(req, { user });
+
+      const params = routeContext?.params
+        ? await routeContext.params
+        : ({} as TParams);
+
+      return handler(req, { user, params });
     } catch (error) {
       console.error("An unexpected error occurred during auth:", error);
       return NextResponse.json(
         { error: "An internal server error occurred" },
-        { status: 500 }
+        { status: 500 },
       );
     }
   };
+}

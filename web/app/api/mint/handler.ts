@@ -1,22 +1,18 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import type { Address } from "@lifi/composer-sdk";
 
+import { agentIdForVersion } from "@/lib/agents/registry";
+import { executeAgentAction } from "@/lib/agents/execute";
 import {
   type AuthenticatedUser,
   userOwnsAddress,
 } from "@/lib/dynamic/dynamic-auth";
-import { getDelegationByAddress } from "@/lib/dynamic/delegation";
-import {
-  buildAndCompileDeposit,
-  depositMetadata,
-  runDelegatedDeposit,
-} from "@/lib/composer/runMint";
+import { depositMetadata } from "@/lib/composer/runMint";
 import { MintRequestSchema } from "./schema";
 
 /**
- * Mint/deposit handler — requires Dynamic JWT + an active delegation share.
- * All transaction signing uses the user's delegated MPC share (no EVM private keys).
+ * Mint/deposit handler — routes through agent execute with guardrails.
+ * Requires Dynamic JWT, delegation share, and installed agent grant.
  */
 export async function handleMintRequest(
   request: NextRequest,
@@ -49,41 +45,38 @@ export async function handleMintRequest(
     );
   }
 
-  const delegation = await getDelegationByAddress(address, chain);
-  if (!delegation) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: `No delegation found for ${address} on ${chain}. Approve delegation in the Dynamic UI first.`,
-      },
-      { status: 404 },
-    );
-  }
+  const agentId = agentIdForVersion(version);
 
   try {
-    const owner = address as Address;
-
-    if (dryRun) {
-      const built = await buildAndCompileDeposit({
-        owner,
-        version,
+    const result = await executeAgentAction({
+      userId: user.sub,
+      agentId,
+      input: {
+        address,
+        chain,
         usdcAmount,
         usdtAmount,
-      });
+        dryRun: dryRun ?? false,
+      },
+    });
 
-      const { compile } = built;
+    if (result.dryRun) {
+      const { preview } = result;
+      const { compile } = preview;
       return NextResponse.json(
         {
           success: true,
           dryRun: true,
           version,
+          agentId,
           ...depositMetadata,
-          usdcAmount: built.usdcAmount,
-          usdtAmount: built.usdtAmount,
-          totalUsdcDeposit: built.totalUsdcDeposit,
-          liquidity: built.liquidity,
-          userProxy: compile.userProxy ?? built.userProxy,
+          usdcAmount: preview.usdcAmount,
+          usdtAmount: preview.usdtAmount,
+          totalUsdcDeposit: preview.totalUsdcDeposit,
+          liquidity: preview.liquidity,
+          userProxy: compile.userProxy ?? preview.userProxy,
           approvalsRequired: compile.approvals?.length ?? 0,
+          guardrails: result.grant,
           transaction: {
             to: compile.transactionRequest.to,
             value: compile.transactionRequest.value,
@@ -94,24 +87,18 @@ export async function handleMintRequest(
       );
     }
 
-    const result = await runDelegatedDeposit({
-      owner,
-      delegation,
-      version,
-      usdcAmount,
-      usdtAmount,
-    });
-
+    const { result: executed } = result;
     return NextResponse.json(
       {
         success: true,
         dryRun: false,
         version,
-        userProxy: result.userProxy,
-        approvalHashes: result.approvalHashes,
-        composeHash: result.composeHash,
-        liquidity: result.liquidity,
-        explorerUrl: `https://optimistic.etherscan.io/tx/${result.composeHash}`,
+        agentId,
+        userProxy: executed.userProxy,
+        approvalHashes: executed.approvalHashes,
+        composeHash: executed.composeHash,
+        liquidity: executed.liquidity,
+        explorerUrl: `https://optimistic.etherscan.io/tx/${executed.composeHash}`,
       },
       { status: 200 },
     );
@@ -119,9 +106,15 @@ export async function handleMintRequest(
     const errorMessage =
       error instanceof Error ? error.message : "Mint failed";
 
+    const status = errorMessage.includes("No grant")
+      ? 403
+      : errorMessage.includes("No delegation")
+        ? 404
+        : 500;
+
     return NextResponse.json(
       { success: false, error: errorMessage },
-      { status: 500 },
+      { status },
     );
   }
 }
