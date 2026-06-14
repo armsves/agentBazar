@@ -33,7 +33,7 @@ async function waitForServerDelegation(
 ): Promise<boolean> {
   const normalizedChain = normalizeChain(chain);
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
       const response = await authFetch(
         `/api/delegation?address=${encodeURIComponent(address)}&chain=${encodeURIComponent(normalizedChain)}`,

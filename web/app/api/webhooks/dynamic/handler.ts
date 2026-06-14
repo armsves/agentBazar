@@ -36,11 +36,29 @@ export async function handleWebhookRequest(request: NextRequest) {
     );
   }
 
-  // Step 2: Validate payload structure with Zod
-  // This ensures type safety and catches malformed payloads early
-  const validationResult = WebhookPayloadSchema.safeParse(
-    verificationResult.payload
-  );
+  const rawPayload = verificationResult.payload;
+  const eventName =
+    typeof rawPayload === "object" &&
+    rawPayload !== null &&
+    "eventName" in rawPayload &&
+    typeof rawPayload.eventName === "string"
+      ? rawPayload.eventName
+      : undefined;
+
+  const handledEvents = new Set([
+    "ping",
+    "wallet.delegation.created",
+    "wallet.delegation.revoked",
+  ]);
+
+  if (!eventName || !handledEvents.has(eventName)) {
+    return NextResponse.json(
+      { success: true, message: `Ignored event: ${eventName ?? "unknown"}` },
+      { status: 200 }
+    );
+  }
+
+  const validationResult = WebhookPayloadSchema.safeParse(rawPayload);
 
   if (!validationResult.success) {
     console.error("Invalid payload structure:", validationResult.error.issues);
@@ -70,12 +88,9 @@ export async function handleWebhookRequest(request: NextRequest) {
       break;
 
     default:
-      // TypeScript ensures this switch is exhaustive
-      // If you add a new event type to the schema, TypeScript will error here
-      // until you add a corresponding case
       return NextResponse.json(
-        { error: "Unexpected event type" },
-        { status: 400 }
+        { success: true, message: `Ignored event: ${payload.eventName}` },
+        { status: 200 }
       );
   }
 
